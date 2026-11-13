@@ -32,18 +32,43 @@ enum NotificationScheduler {
         center.removePendingNotificationRequests(withIdentifiers: ownIDs)
 
         let calendar = Calendar.current
-        let currentKey = CycleDate.key(for: now, calendar: calendar)
+        let currentCycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
+        let nextCycleStart = CycleDate.nextBoundary(after: now, payday: data.payday, calendar: calendar)
         var candidates: [(Date, UNNotificationRequest)] = []
 
         for item in data.items {
+            let currentDue = CycleDate.dueDate(
+                for: item,
+                cycleStarting: currentCycleStart,
+                calendar: calendar
+            )
+            let currentKey = data.cycleKey(for: currentDue, calendar: calendar)
             if !data.isComplete(item.id, cycleKey: currentKey) {
-                candidates += requests(for: item, month: now, includeFollowUps: true, now: now, calendar: calendar)
+                candidates += requests(
+                    for: item,
+                    due: currentDue,
+                    payday: data.payday,
+                    includeFollowUps: true,
+                    now: now,
+                    calendar: calendar
+                )
             }
 
-            let nextMonth = CycleDate.offset(1, from: now, calendar: calendar)
-            let nextKey = CycleDate.key(for: nextMonth, calendar: calendar)
+            let nextDue = CycleDate.dueDate(
+                for: item,
+                cycleStarting: nextCycleStart,
+                calendar: calendar
+            )
+            let nextKey = data.cycleKey(for: nextDue, calendar: calendar)
             if !data.isComplete(item.id, cycleKey: nextKey) {
-                candidates += requests(for: item, month: nextMonth, includeFollowUps: false, now: now, calendar: calendar)
+                candidates += requests(
+                    for: item,
+                    due: nextDue,
+                    payday: data.payday,
+                    includeFollowUps: false,
+                    now: now,
+                    calendar: calendar
+                )
             }
         }
 
@@ -52,7 +77,7 @@ enum NotificationScheduler {
             try? await center.add(request)
         }
 
-        let key = CycleDate.key(for: now)
+        let key = data.cycleKey(for: now)
         let remaining = data.items.filter { !data.isComplete($0.id, cycleKey: key) }.count
         try? await center.setBadgeCount(remaining)
     }
@@ -68,15 +93,24 @@ enum NotificationScheduler {
         center.removeDeliveredNotifications(withIdentifiers: deliveredIDs)
     }
 
+    static func removeAllDeliveredNotifications() async {
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications()
+        let ownIDs = delivered
+            .map { $0.request.identifier }
+            .filter { $0.hasPrefix(AppConfig.notificationPrefix) }
+        center.removeDeliveredNotifications(withIdentifiers: ownIDs)
+    }
+
     private static func requests(
         for item: SavingsItem,
-        month: Date,
+        due: Date,
+        payday: Int,
         includeFollowUps: Bool,
         now: Date,
         calendar: Calendar
     ) -> [(Date, UNNotificationRequest)] {
-        let due = CycleDate.dueDate(for: item, monthContaining: month, calendar: calendar)
-        let key = CycleDate.key(for: month, calendar: calendar)
+        let key = CycleDate.key(for: due, payday: payday, calendar: calendar)
         var dates: [(String, Date, String)] = []
 
         if item.leadDays > 0,

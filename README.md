@@ -8,7 +8,8 @@
 
 - 항목별 이름, 금액, 매월 출금일, 알림 시각 설정
 - 항목별 사전 알림일 및 미완료 재알림 횟수 설정
-- 월별 완료 기록을 분리하여 다음 달 자동 초기화
+- 월급일 기준으로 완료 기록을 분리하여 새 주기 자동 초기화
+- 매월 1~31일 중 월급일 설정, 짧은 달은 말일 자동 보정
 - 앱, 홈 화면 위젯, 잠금 화면 위젯에서 완료 상태 공유
 - 알림의 `입금 완료` 액션으로 앱을 열지 않고 완료 처리
 - 잠금 화면과 Dynamic Island에 표시되는 interactive Live Activity
@@ -38,10 +39,11 @@ iOS 17~25에서도 앱, 위젯, 로컬 알림 및 수동 Live Activity 시작을
 2. 이름, 금액, 매월 출금일, 알림 시각을 설정합니다.
 3. 필요하면 사전 알림과 출금일 이후 재알림 횟수를 조정합니다.
 4. 알림, 앱, 위젯 또는 Live Activity에서 입금 완료를 체크합니다.
-5. 완료 상태는 해당 월의 기록으로 저장됩니다.
-6. 달이 바뀌면 동일 항목이 새 월의 미완료 상태로 자동 표시됩니다.
+5. 설정에서 월급일을 선택합니다. 기본값은 매월 1일입니다.
+6. 완료 상태는 현재 월급 주기의 기록으로 저장됩니다.
+7. 다음 월급일이 되면 동일 항목이 새 주기의 미완료 상태로 자동 표시됩니다.
 
-물리적으로 체크 값을 초기화하거나 기존 기록을 삭제하지 않습니다. 완료 여부는 `(itemID, cycleKey)` 조합으로 판단하기 때문에 새 월에는 자연스럽게 새 체크리스트가 만들어지고 과거 기록도 남습니다.
+물리적으로 체크 값을 초기화하거나 기존 기록을 삭제하지 않습니다. 완료 여부는 `(itemID, cycleKey)` 조합으로 판단하기 때문에 월급일에 새 체크리스트가 자연스럽게 만들어지고 과거 기록도 남습니다.
 
 ## 시스템 구성
 
@@ -76,7 +78,7 @@ flowchart LR
 ├── DonCheck/                           # iOS 앱 타깃
 │   ├── DonCheckApp.swift               # 앱 진입점과 알림 액션 처리
 │   ├── ChecklistStore.swift            # 화면 상태 및 기능 오케스트레이션
-│   ├── ContentView.swift               # 월별 대시보드와 항목 목록
+│   ├── ContentView.swift               # 월급 주기 대시보드와 항목 목록
 │   ├── ItemEditorView.swift            # 항목 생성·수정 폼
 │   ├── SettingsView.swift              # 권한, 재예약, Live Activity 시작
 │   └── DonCheck.entitlements           # App Group entitlement
@@ -113,7 +115,7 @@ flowchart LR
 4. 실제 기기 또는 시뮬레이터를 선택합니다.
 5. `DonCheck` scheme을 Run합니다.
 6. 첫 실행 후 앱 설정에서 알림을 허용합니다.
-7. 홈 화면이나 잠금 화면에 `이번 달 저축` 위젯을 추가합니다.
+7. 홈 화면이나 잠금 화면에 `저축 체크리스트` 위젯을 추가합니다.
 
 ### 식별자 변경
 
@@ -162,14 +164,17 @@ xcodebuild \
 
 Debug 빌드에서는 scheme의 launch argument에 `-startLiveChecklist`를 추가하면 앱 시작 직후 Live Activity 시작 경로를 시험할 수 있습니다. 미완료 항목이 최소 한 개 있어야 합니다.
 
-## 월별 주기 규칙
+## 월급일 기준 주기 규칙
 
-- 월 키는 `yyyy-MM` 형식입니다. 예: `2026-11`.
-- 완료 기록은 항목 ID와 월 키의 조합으로 저장됩니다.
+- 설정에서 월급일을 1~31일 중 선택하며 기본값은 1일입니다.
+- 주기 키는 시작일을 나타내는 `yyyy-MM-dd` 형식입니다. 예: `2026-11-25`.
+- 월급일 당일 00:00부터 새 주기가 시작됩니다.
+- 완료 기록은 항목 ID와 주기 키의 조합으로 저장됩니다.
+- 월급일이 29~31일이고 해당 월에 그 날짜가 없으면 그 달의 마지막 날을 사용합니다.
 - 출금일이 29~31일이고 해당 월에 그 날짜가 없으면 그 달의 마지막 날로 보정합니다.
 - 금액은 정수 원 단위로 저장합니다.
 - 완료 기록은 데이터를 저장할 때 최근 24개월만 유지합니다.
-- 달이 바뀌어도 항목 정의는 유지되고 완료 상태만 새 월 기준으로 계산됩니다.
+- 새 주기가 시작되어도 항목 정의와 과거 기록은 유지되고 완료 상태만 새 주기 기준으로 계산됩니다.
 
 ## 알림 동작
 
@@ -181,7 +186,7 @@ Debug 빌드에서는 scheme의 launch argument에 `-startLiveChecklist`를 추�
 
 사전 알림은 일반 active interruption level을 사용하고, 출금일 및 재알림은 time-sensitive level을 사용합니다. 사용자는 시스템 설정에서 time-sensitive 권한을 끌 수 있습니다.
 
-앱은 자신이 만든 기존 pending request를 지운 뒤 현재 월과 다음 월 기준으로 다시 계산합니다. iOS의 pending notification 제한을 고려해 가장 가까운 60개만 등록합니다.
+앱은 자신이 만든 기존 pending request를 지운 뒤 현재 월급 주기와 다음 주기의 출금 건을 다시 계산합니다. iOS의 pending notification 제한을 고려해 가장 가까운 60개만 등록합니다.
 
 ## Live Activity 유지 전략
 
@@ -218,7 +223,7 @@ Live Activity의 표시 우선순위와 Dynamic Island 점유는 iOS가 결정�
 - iOS 17~25에서는 특정 미래 시각에 Live Activity를 로컬 예약할 수 없습니다.
 - 위젯 및 Live Activity payload는 크기 제한을 받으므로 항목 수가 매우 많으면 별도 축약 전략이 필요합니다.
 - 현재 자동화된 unit/UI test target은 없습니다.
-- 데이터 migration framework는 없으며 현재 저장 스키마 키는 `checklist-data-v1`입니다.
+- 현재 저장 스키마 키는 `checklist-data-v2`이며 v1 데이터는 최초 load 때 자동 변환됩니다.
 - Apple 미리 알림 앱과는 동기화하지 않습니다.
 
 ## 상세 문서
@@ -229,7 +234,7 @@ Live Activity의 표시 우선순위와 Dynamic Island 점유는 iOS가 결정�
 | [제품 요구사항](Docs/product/requirements.md) | 목표, 비목표, 사용자 시나리오 |
 | [제품 로드맵](Docs/product/roadmap.md) | 월급일 초기화와 항목별 2단계 체크 등 구현 예정 기능 |
 | [아키텍처](Docs/architecture/overview.md) | 타깃, 프로세스, 데이터 흐름 |
-| [체크리스트와 월별 주기](Docs/features/checklist.md) | 모델과 완료 상태 계산 |
+| [체크리스트와 월급 주기](Docs/features/checklist.md) | 모델과 완료 상태 계산 |
 | [앱 UI와 상태 관리](Docs/features/app-ui.md) | 화면 구조, 입력 검증, lifecycle |
 | [알림](Docs/features/notifications.md) | 예약, 액션, 취소, 제한 |
 | [Live Activity](Docs/features/live-activity.md) | UI, 릴레이, OS별 동작, 실패 처리 |

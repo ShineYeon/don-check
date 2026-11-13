@@ -13,7 +13,7 @@ DonCheck는 iOS 앱 타깃과 WidgetKit extension 타깃으로 구성된다. 두
 책임:
 
 - 항목 생성, 수정, 삭제 UI
-- 현재 월 요약과 목록 표시
+- 현재 월급 주기 요약과 목록 표시
 - 알림 권한 상태 및 설정 화면
 - notification action delegate 처리
 - 저장 이후 파생 시스템 상태 재구성
@@ -48,7 +48,7 @@ DonCheck는 iOS 앱 타깃과 WidgetKit extension 타깃으로 구성된다. 두
 | 파일 | 책임 |
 |---|---|
 | `AppConfig.swift` | App Group ID와 notification ID prefix |
-| `Models.swift` | 도메인 모델, 월 키, 날짜 계산 |
+| `Models.swift` | 도메인 모델, 월급 주기 키, 날짜 계산 |
 | `ChecklistRepository.swift` | JSON load/save와 완료 변경 |
 | `NotificationScheduler.swift` | 로컬 알림 생성, 제거, badge |
 | `SavingsChecklistActivity.swift` | Activity attributes/state와 lifecycle |

@@ -40,7 +40,7 @@ struct ContentState: Codable, Hashable {
 }
 ```
 
-Content state에는 렌더링과 체크 intent에 필요한 월 키와 항목 snapshot을 넣는다. `remainingCount`, `completedCount`, `remainingAmount`는 computed property다.
+Content state에는 렌더링과 체크 intent에 필요한 월급 주기 키와 항목 snapshot을 넣는다. `remainingCount`, `completedCount`, `remainingAmount`는 computed property다.
 
 ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목을 payload에 넣지만 UI에는 일부만 표시한다. 항목 수가 커질 경우 미완료 상위 N개와 요약 값만 보내는 방식으로 변경해야 한다.
 
@@ -50,7 +50,7 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 
 표시 내용:
 
-- `이번 달 저축` 제목
+- `이번 저축 주기` 제목
 - 상태 subtitle
 - 미완료 개수
 - 남은 금액
@@ -79,7 +79,7 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 각 row는 `ToggleSavingsItemIntent`를 실행한다. 이 intent는 `LiveActivityIntent`를 채택하며 다음 작업을 수행한다.
 
 1. repository에서 해당 item/month 상태 변경
-2. 완료 처리라면 현재 월 item 알림 제거
+2. 완료 처리라면 해당 월급 주기 item 알림 제거
 3. 전체 알림 재예약
 4. Live Activity refresh
 5. 일반 widget timeline reload
@@ -106,7 +106,7 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 
 ## 6. 자동 시작 조건
 
-iOS 26 이상에서 `refresh`는 현재 월 미완료 항목 중 하나라도 주의 시점에 도달했는지 확인한다.
+iOS 26 이상에서 `refresh`는 현재 월급 주기의 미완료 항목 중 하나라도 주의 시점에 도달했는지 확인한다.
 
 ```text
 주의 시점 = 출금 예정 시각 - leadDays
@@ -149,7 +149,7 @@ relay interval = 7시간 55분
 
 `LiveActivityManager.refresh` 순서:
 
-1. 현재 월 content state 생성
+1. 현재 월급 주기 content state 생성
 2. 모든 active activity 조회
 3. 미완료가 없으면 active를 immediate dismissal로 종료
 4. 미완료가 있으면 active content update
@@ -163,7 +163,7 @@ relay interval = 7시간 55분
 
 ## 9. 완료 시 종료
 
-현재 월 모든 항목이 완료되면:
+현재 월급 주기의 모든 항목이 완료되면:
 
 - active activity를 `.immediate` dismissal policy로 종료
 - iOS 26 이상 pending activity도 모두 종료

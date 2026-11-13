@@ -1,11 +1,11 @@
-# 체크리스트와 월별 주기
+# 체크리스트와 월급일 주기
 
 ## 1. 책임
 
 체크리스트 기능은 다음 질문에 답한다.
 
 - 어떤 저축 항목이 존재하는가?
-- 이번 달에 어떤 항목이 완료되었는가?
+- 현재 월급 주기에 어떤 항목이 완료되었는가?
 - 현재 남은 금액과 완료 개수는 얼마인가?
 - 29~31일 출금 항목을 짧은 달에서 언제 처리할 것인가?
 
@@ -55,26 +55,29 @@ struct CompletionRecord: Codable, Hashable {
 }
 ```
 
-완료 상태를 `SavingsItem` 안의 Boolean으로 저장하지 않는다. 같은 항목이 매월 반복되므로 항목 정의와 월별 실행 기록을 분리한다.
+완료 상태를 `SavingsItem` 안의 Boolean으로 저장하지 않는다. 같은 항목이 매월 반복되므로 항목 정의와 월급 주기별 실행 기록을 분리한다.
 
 논리적 unique key는 `(itemID, cycleKey)`다. 저장 전에 동일 조합을 제거하므로 정상 경로에서는 한 건만 존재한다.
 
-## 3. 월 키
+## 3. 월급일과 주기 키
 
-`CycleDate.key(for:)`는 현재 calendar에서 연도와 월을 가져와 `yyyy-MM` 문자열을 만든다.
+`ChecklistData.payday`는 1~31 범위의 월급일이다. 기존 데이터와 새 설치의 기본값은 1일이다. `CycleDate.key(for:payday:)`는 입력 날짜에서 가장 가까운 과거 월급일을 찾아 `yyyy-MM-dd` 문자열을 만든다.
 
 ```text
-2026년 11월 13일 → 2026-11
-2027년  1월  1일 → 2027-01
+월급일 25일, 2026년 11월 24일 → 2026-10-25
+월급일 25일, 2026년 11월 25일 → 2026-11-25
+월급일 25일, 2027년  1월  1일 → 2026-12-25
 ```
+
+월급일 당일 00:00부터 새 주기를 사용한다. 29~31일이 없는 달에는 말일을 월급일로 보정한다. 예를 들어 월급일 31일이면 2027년 2월 주기는 2월 28일부터 시작한다.
 
 완료 판정:
 
 ```swift
-data.isComplete(item.id, cycleKey: "2026-11")
+data.isComplete(item.id, cycleKey: "2026-11-25")
 ```
 
-12월에 완료했던 항목도 1월에는 `(같은 itemID, 2027-01)` 기록이 없으므로 미완료다. 별도 reset timer나 background task가 필요하지 않은 이유다.
+한 주기에 완료했던 항목도 다음 월급일에는 새 키의 기록이 없으므로 미완료다. 별도 reset timer나 background task가 필요하지 않은 이유다. 위젯은 다음 월급일 경계를 timeline reload 시점으로 등록하고, 앱과 extension은 동작할 때마다 같은 계산을 수행한다.
 
 ## 4. 출금일 계산
 
@@ -109,13 +112,13 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 
 ## 6. 완료 토글
 
-앱 내부 토글은 현재 월 키를 사용한다.
+앱 내부 토글은 현재 월급 주기 키를 사용한다.
 
-1. 동일 item/month 완료 기록 제거
+1. 동일 item/cycle 완료 기록 제거
 2. 다음 상태가 완료라면 새 `CompletionRecord` 추가
 3. 저장 및 파생 상태 재구성
 
-위젯과 Live Activity는 렌더링 당시의 `cycleKey`를 intent parameter로 전달한다. notification action도 payload에 들어 있던 `cycleKey`를 사용하므로 알림이 월 경계 후 늦게 눌려도 원래 대상 월을 완료 처리한다.
+위젯과 Live Activity는 렌더링 당시의 `cycleKey`를 intent parameter로 전달한다. notification action도 payload에 들어 있던 `cycleKey`를 사용하므로 알림이 월급일 경계 후 늦게 눌려도 원래 대상 주기를 완료 처리한다.
 
 ## 7. 집계 값
 
@@ -140,6 +143,9 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 - 1월 31일 → 2월 말일 보정
 - 윤년 2월 29일
 - 12월 → 다음 해 1월 cycle 전환
+- 월급일 전날 23:59 → 월급일 00:00 전환
+- 월급일 29~31일의 평년/윤년 2월 말일 보정
+- 월급일 변경으로 현재 cycle이 달라지는 경우
 - 출금일 당일 알림 시각 이전/이후
 - 월말 사전 알림이 이전 달로 넘어가는 경우
 - 지난달 notification action을 이번 달에 누르는 경우
@@ -148,7 +154,7 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 
 ## 10. 향후 개선
 
-- 월급일을 경계로 한 체크 주기와 항목별 2단계 완료 체크는 [제품 로드맵](../product/roadmap.md)에 요구사항과 migration 방향을 정리한다.
+- 항목별 2단계 완료 체크는 [제품 로드맵](../product/roadmap.md)에 요구사항과 migration 방향을 정리한다.
 - 월별 history 조회 UI
 - 완료 취소 audit 기록
 - 항목 순서 재정렬

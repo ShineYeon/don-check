@@ -9,23 +9,20 @@ struct ChecklistEntry: TimelineEntry {
 
 struct ChecklistProvider: TimelineProvider {
     func placeholder(in context: Context) -> ChecklistEntry {
-        ChecklistEntry(date: .now, data: sampleData, cycleKey: CycleDate.key(for: .now))
+        ChecklistEntry(date: .now, data: sampleData, cycleKey: sampleData.cycleKey(for: .now))
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ChecklistEntry) -> Void) {
         let data = context.isPreview ? sampleData : ChecklistRepository.shared.load()
-        completion(ChecklistEntry(date: .now, data: data, cycleKey: CycleDate.key(for: .now)))
+        completion(ChecklistEntry(date: .now, data: data, cycleKey: data.cycleKey(for: .now)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ChecklistEntry>) -> Void) {
         let now = Date.now
-        let entry = ChecklistEntry(date: now, data: ChecklistRepository.shared.load(), cycleKey: CycleDate.key(for: now))
-        let nextMidnight = Calendar.current.nextDate(
-            after: now,
-            matching: DateComponents(hour: 0, minute: 0),
-            matchingPolicy: .nextTime
-        ) ?? now.addingTimeInterval(3600)
-        completion(Timeline(entries: [entry], policy: .after(nextMidnight)))
+        let data = ChecklistRepository.shared.load()
+        let entry = ChecklistEntry(date: now, data: data, cycleKey: data.cycleKey(for: now))
+        let nextPayday = CycleDate.nextBoundary(after: now, payday: data.payday)
+        completion(Timeline(entries: [entry], policy: .after(nextPayday)))
     }
 
     private var sampleData: ChecklistData {
@@ -44,7 +41,7 @@ struct DonCheckWidget: Widget {
             ChecklistWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("이번 달 저축")
+        .configurationDisplayName("저축 체크리스트")
         .description("남은 저축 항목을 확인하고 바로 체크합니다.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryCircular])
     }
@@ -66,7 +63,7 @@ private struct ChecklistWidgetView: View {
 
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
-                Text("이번 달 저축")
+                Text("이번 저축 주기")
                     .font(.headline)
                 Text("\(remainingCount)개 · \(remainingAmount.formatted(.number.notation(.compactName)))원 남음")
                     .font(.caption)
@@ -75,7 +72,7 @@ private struct ChecklistWidgetView: View {
 
         case .systemSmall:
             VStack(alignment: .leading, spacing: 8) {
-                Label("이번 달 저축", systemImage: "checklist")
+                Label("이번 저축 주기", systemImage: "checklist")
                     .font(.headline)
                 Spacer()
                 Text("\(remainingCount)개")
@@ -90,7 +87,7 @@ private struct ChecklistWidgetView: View {
         default:
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label("이번 달 저축", systemImage: "checklist")
+                    Label("이번 저축 주기", systemImage: "checklist")
                         .font(.headline)
                     Spacer()
                     Text("\(completedCount)/\(entry.data.items.count)")

@@ -191,7 +191,7 @@ Widget extension 수동 plist에 다음 기본 bundle key가 있는지 확인한
 현재 identifier:
 
 ```text
-doncheck.<UUID>.<yyyy-MM>.<kind>
+doncheck.<UUID>.<yyyy-MM-dd>.<kind>
 ```
 
 개발 중 schema를 바꿨다면 Simulator 설정에서 notification을 지우거나 앱을 재설치한다.

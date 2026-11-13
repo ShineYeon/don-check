@@ -5,10 +5,10 @@ import WidgetKit
 
 struct ToggleSavingsItemIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "저축 항목 완료 변경"
-    static var description = IntentDescription("이번 달 저축 항목의 완료 상태를 변경합니다.")
+    static var description = IntentDescription("현재 저축 주기 항목의 완료 상태를 변경합니다.")
 
     @Parameter(title: "항목 ID") var itemID: String
-    @Parameter(title: "월") var cycleKey: String
+    @Parameter(title: "주기") var cycleKey: String
     @Parameter(title: "완료") var nextValue: Bool
 
     init() {}

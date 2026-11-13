@@ -73,12 +73,12 @@ doncheck.6C96...A21.2026-11.followup-1
 
 ### 4.3 재알림
 
-- 조건: 현재 월 항목이 미완료이며 `followUpCount > 0`
+- 조건: 알림 대상 월급 주기의 항목이 미완료이며 `followUpCount > 0`
 - 시각: 출금일 이후 1일부터 `followUpCount`일까지 같은 시각
 - 문구: `아직 완료하지 않은 저축 항목이에요`
 - interruption level: `.timeSensitive`
 
-다음 달에 대해서는 사전 알림과 출금일 알림만 미리 만든다. 다음 달 재알림은 그 달이 현재 월이 되어 다시 schedule될 때 생성한다.
+다음 월급 주기의 출금 건에 대해서는 사전 알림과 출금일 알림만 미리 만든다. 다음 주기의 재알림은 그 주기가 현재 주기가 되어 다시 schedule될 때 생성한다.
 
 ## 5. 전체 재예약 알고리즘
 
@@ -86,22 +86,24 @@ doncheck.6C96...A21.2026-11.followup-1
 
 1. 시스템에서 pending notification request를 조회한다.
 2. identifier가 `doncheck.`로 시작하는 request를 제거한다.
-3. 현재 월의 미완료 항목에 대해 early/due/follow-up 후보를 생성한다.
-4. 다음 월의 미완료 항목에 대해 early/due 후보를 생성한다.
+3. 현재 월급 주기 안에서 항목별 출금일을 계산하고 미완료 항목에 대해 early/due/follow-up 후보를 생성한다.
+4. 다음 월급 주기 안에서 항목별 출금일을 계산하고 미완료 항목에 대해 early/due 후보를 생성한다.
 5. 이미 지난 후보를 제거한다.
 6. 날짜 오름차순으로 정렬한다.
 7. 가장 가까운 60개를 시스템에 등록한다.
-8. 현재 월 미완료 개수를 app badge로 설정한다.
+8. 현재 월급 주기의 미완료 개수를 app badge로 설정한다.
 
 재예약은 incremental update보다 비용이 크지만, 삭제·수정·완료 취소를 동일한 코드 경로로 안전하게 처리한다.
 
 ## 6. 완료 시 취소
 
-`cancel(itemID:cycleKey:)`는 pending과 delivered notification을 각각 조회한다. 대상 item/month identifier prefix를 가진 알림만 제거한다.
+`cancel(itemID:cycleKey:)`는 pending과 delivered notification을 각각 조회한다. 대상 item/cycle identifier prefix를 가진 알림만 제거한다.
 
 delivered notification은 pending 목록에 존재하지 않기 때문에 두 목록을 모두 조회해야 한다. 이 구분을 제거하면 체크 후에도 Notification Center에 이미 전달된 알림이 남을 수 있다.
 
-이후 `rescheduleAll`을 호출해 다른 항목과 다음 월 알림을 유지한다.
+이후 `rescheduleAll`을 호출해 다른 항목과 다음 주기 알림을 유지한다.
+
+월급일을 변경하는 경우에는 이전 주기 문맥으로 이미 전달된 DonCheck 알림 전체를 제거한 뒤 pending request를 새 주기로 다시 만든다. 다른 앱의 알림에는 영향을 주지 않는다.
 
 ## 7. 알림 액션 처리
 
@@ -110,7 +112,7 @@ notification content의 `userInfo`에는 다음 값이 들어간다.
 ```swift
 [
     "itemID": item.id.uuidString,
-    "cycleKey": "2026-11"
+    "cycleKey": "2026-11-25"
 ]
 ```
 
@@ -140,7 +142,7 @@ payload가 없거나 UUID parsing에 실패하면 아무 상태도 바꾸지 않
 
 iOS는 앱별 pending local notification 수를 제한한다. 구현은 안전 여유를 두고 60개까지만 등록한다. 항목 수와 재알림 수가 많으면 먼 미래 후보가 잘릴 수 있다.
 
-예를 들어 항목 10개, 항목별 현재 월 early/due/follow-up 7개, 다음 월 early/due를 모두 만들면 100개에 가까워진다. 이 경우 가까운 알림만 남는다.
+예를 들어 항목 10개, 항목별 현재 주기 early/due/follow-up 7개, 다음 주기 early/due를 모두 만들면 100개에 가까워진다. 이 경우 가까운 알림만 남는다.
 
 ### 권한 거부
 

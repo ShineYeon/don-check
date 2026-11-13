@@ -37,9 +37,9 @@ Published state:
 
 계산 property:
 
-- `cycleKey`: 현재 월 키
-- `completedCount`: 현재 월 완료 개수
-- `remainingAmount`: 현재 월 미완료 금액
+- `cycleKey`: 현재 월급 주기 키
+- `completedCount`: 현재 주기 완료 개수
+- `remainingAmount`: 현재 주기 미완료 금액
 
 ### 초기화
 
@@ -96,7 +96,7 @@ prune history
 
 상호작용:
 
-- 체크 icon 탭: 현재 월 완료 toggle
+- 체크 icon 탭: 현재 주기 완료 toggle
 - row 탭: 편집 sheet
 - swipe delete: 항목과 관련 history 삭제
 
@@ -144,7 +144,7 @@ followUpCount: 3
 `완료하지 않았을 때`:
 
 - 재알림 Stepper 0...7
-- 체크 시 현재 월 남은 알림 취소 안내
+- 체크 시 현재 주기 남은 알림 취소 안내
 
 ### 저장 검증
 
@@ -162,6 +162,13 @@ trimmedName.isEmpty || amount <= 0
 
 ## 6. 설정 화면
 
+### 체크 주기 section
+
+- 월급일 Picker 1...31
+- 변경 전 confirmation dialog
+- 변경 확정 시 저장, 위젯 reload, 알림 재예약, Live Activity 갱신
+- 짧은 달의 말일 보정과 00:00 경계 설명
+
 ### 잠금 화면 체크리스트 section
 
 `지금 Live 체크리스트 띄우기` 버튼은 미완료 항목이 있을 때만 활성화된다.
@@ -177,7 +184,7 @@ trimmedName.isEmpty || amount <= 0
 
 ### 작동 방식 section
 
-월별 완료 기록과 iOS의 영구 notification 고정 제한을 설명한다.
+월급일 기준 완료 기록과 iOS의 영구 notification 고정 제한을 설명한다.
 
 ## 7. Scene lifecycle
 

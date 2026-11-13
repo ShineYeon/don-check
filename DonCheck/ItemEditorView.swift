@@ -42,7 +42,7 @@ struct ItemEditorView: View {
                         value: $draft.followUpCount,
                         in: 0...7
                     )
-                    Text("체크하면 이번 달의 남은 알림은 자동으로 취소됩니다.")
+                    Text("체크하면 현재 저축 주기의 남은 알림은 자동으로 취소됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

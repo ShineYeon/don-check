@@ -75,7 +75,7 @@ git diff --check
 - badge 업데이트
 - widget과 Live Activity 업데이트
 
-## 5. 날짜와 월 주기
+## 5. 날짜와 월급 주기
 
 | 케이스 | 기대 결과 |
 |---|---|
@@ -83,6 +83,11 @@ git diff --check
 | 31일 설정, 평년 2월 | 2월 28일 |
 | 31일 설정, 윤년 2월 | 2월 29일 |
 | 12월 완료 후 1월 | 새 cycle에서 미완료 |
+| 월급일 25일, 24일 23:59 | 이전 달 25일 시작 cycle |
+| 월급일 25일, 25일 00:00 | 현재 달 25일 시작 cycle |
+| 월급일 31일, 평년 2월 28일 | 2월 28일 시작 cycle |
+| 월급일 31일, 윤년 2월 29일 | 2월 29일 시작 cycle |
+| 월급일 변경 | 현재 cycle 재계산 및 system UI 동기화 |
 | 월말 사전 알림 | 이전 달 날짜로 예약 |
 | 다른 시간대로 이동 | 다음 재예약에서 현지 calendar 적용 |
 
@@ -116,7 +121,7 @@ let requests = await UNUserNotificationCenter.current().pendingNotificationReque
 - 표시 개수 truncation
 - 위젯 버튼 완료 처리
 - 앱으로 복귀했을 때 최신 상태 reload
-- 자정 이후 cycle 변경
+- 월급일 00:00 이후 cycle 변경
 - dark mode와 tinted appearance
 
 ## 8. Live Activity

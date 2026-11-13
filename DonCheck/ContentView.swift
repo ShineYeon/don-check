@@ -20,7 +20,7 @@ struct ContentView: View {
                     .listRowBackground(Color.clear)
                 }
 
-                Section("이번 달") {
+                Section("이번 주기") {
                     if store.data.items.isEmpty {
                         ContentUnavailableView(
                             "저축 항목이 없어요",
@@ -72,7 +72,8 @@ struct ContentView: View {
     }
 
     private var monthTitle: String {
-        Date.now.formatted(.dateTime.year().month(.wide)) + " 저축"
+        let start = CycleDate.date(for: store.cycleKey) ?? .now
+        return start.formatted(.dateTime.year().month(.wide)) + " 저축"
     }
 }
 

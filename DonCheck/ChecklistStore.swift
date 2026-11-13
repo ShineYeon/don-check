@@ -26,7 +26,7 @@ final class ChecklistStore: ObservableObject {
         }
     }
 
-    var cycleKey: String { CycleDate.key(for: .now) }
+    var cycleKey: String { data.cycleKey(for: .now) }
     var completedCount: Int { data.completedCount(cycleKey: cycleKey) }
     var remainingAmount: Int { data.remainingAmount(cycleKey: cycleKey) }
 
@@ -45,6 +45,13 @@ final class ChecklistStore: ObservableObject {
             data.items.append(item)
         }
         persist()
+    }
+
+    func updatePayday(_ day: Int) {
+        let validDay = ChecklistData.validPayday(day)
+        guard data.payday != validDay else { return }
+        data.payday = validDay
+        persist(removeDeliveredNotifications: true)
     }
 
     func delete(at offsets: IndexSet) {
@@ -90,11 +97,14 @@ final class ChecklistStore: ObservableObject {
         }
     }
 
-    private func persist() {
+    private func persist(removeDeliveredNotifications: Bool = false) {
         repository.pruneHistory(in: &data)
         repository.save(data)
         WidgetCenter.shared.reloadAllTimelines()
         Task {
+            if removeDeliveredNotifications {
+                await NotificationScheduler.removeAllDeliveredNotifications()
+            }
             await NotificationScheduler.rescheduleAll(data)
             await LiveActivityManager.refresh(data)
         }

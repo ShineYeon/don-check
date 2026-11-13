@@ -4,10 +4,26 @@ import UIKit
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: ChecklistStore
+    @State private var pendingPayday: Int?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("체크 주기") {
+                    Picker("월급일", selection: Binding(
+                        get: { store.data.payday },
+                        set: { pendingPayday = $0 }
+                    )) {
+                        ForEach(1...31, id: \.self) { day in
+                            Text("매월 \(day)일").tag(day)
+                        }
+                    }
+
+                    Text("월급일 00:00부터 새 저축 주기가 시작되고 모든 항목이 빈 체크박스로 표시됩니다. 29~31일이 없는 달에는 그 달의 마지막 날을 사용합니다.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("잠금화면 체크리스트") {
                     Button("지금 Live 체크리스트 띄우기") {
                         Task { await store.showLiveChecklistNow() }
@@ -39,7 +55,7 @@ struct SettingsView: View {
                 }
 
                 Section("작동 방식") {
-                    Text("각 항목의 완료 여부는 월별로 보관됩니다. 달이 바뀌면 새 체크리스트가 자동으로 시작되고 이전 기록은 유지됩니다.")
+                    Text("각 항목의 완료 여부는 월급일로 구분한 주기별로 보관됩니다. 새 주기가 시작되어도 이전 완료 기록은 삭제되지 않습니다.")
                     Text("iOS 정책상 알림을 화면 맨 위에 영구 고정할 수는 없습니다. 홈 화면과 잠금 화면 위젯을 함께 사용하세요.")
                 }
                 .font(.footnote)
@@ -47,6 +63,26 @@ struct SettingsView: View {
             }
             .navigationTitle("설정")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(
+                "월급일을 변경할까요?",
+                isPresented: Binding(
+                    get: { pendingPayday != nil },
+                    set: { if !$0 { pendingPayday = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let pendingPayday {
+                    Button("매월 \(pendingPayday)일로 변경") {
+                        store.updatePayday(pendingPayday)
+                        self.pendingPayday = nil
+                    }
+                }
+                Button("취소", role: .cancel) {
+                    pendingPayday = nil
+                }
+            } message: {
+                Text("현재 체크 주기가 달라질 수 있으며, 알림과 잠금화면 체크리스트가 새 일정으로 다시 만들어집니다.")
+            }
             .alert("Live Activity", isPresented: Binding(
                 get: { store.liveActivityMessage != nil },
                 set: { if !$0 { store.liveActivityMessage = nil } }

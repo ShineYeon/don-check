@@ -46,7 +46,7 @@ enum LiveActivityError: LocalizedError {
 enum LiveActivityManager {
     static func startNow(_ data: ChecklistData, subtitle: String = "완료할 항목을 체크하세요") async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw LiveActivityError.disabled }
-        let state = contentState(data: data, cycleKey: CycleDate.key(for: .now), subtitle: subtitle)
+        let state = contentState(data: data, cycleKey: data.cycleKey(for: .now), subtitle: subtitle)
         guard state.remainingCount > 0 else { throw LiveActivityError.noIncompleteItems }
 
         let todayKey = dayKey(for: .now)
@@ -70,7 +70,7 @@ enum LiveActivityManager {
     }
 
     static func refresh(_ data: ChecklistData, now: Date = .now) async {
-        let currentKey = CycleDate.key(for: now)
+        let currentKey = data.cycleKey(for: now)
         let state = contentState(data: data, cycleKey: currentKey, subtitle: "완료할 항목을 체크하세요")
 
         var hasActiveActivity = false
@@ -143,10 +143,15 @@ enum LiveActivityManager {
 
     private static func shouldStartImmediately(data: ChecklistData, now: Date) -> Bool {
         let calendar = Calendar.current
-        let cycleKey = CycleDate.key(for: now, calendar: calendar)
+        let cycleKey = data.cycleKey(for: now, calendar: calendar)
+        let cycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
         return data.items.contains { item in
             guard !data.isComplete(item.id, cycleKey: cycleKey) else { return false }
-            let due = CycleDate.dueDate(for: item, monthContaining: now, calendar: calendar)
+            let due = CycleDate.dueDate(
+                for: item,
+                cycleStarting: cycleStart,
+                calendar: calendar
+            )
             let attention = calendar.date(byAdding: .day, value: -item.leadDays, to: due) ?? due
             return attention <= now
         }
@@ -156,11 +161,20 @@ enum LiveActivityManager {
         let calendar = Calendar.current
         var attentionDates: [Date] = []
 
-        for monthOffset in 0...1 {
-            let month = CycleDate.offset(monthOffset, from: now, calendar: calendar)
-            let monthCycleKey = CycleDate.key(for: month, calendar: calendar)
-            for item in data.items where !data.isComplete(item.id, cycleKey: monthCycleKey) {
-                let due = CycleDate.dueDate(for: item, monthContaining: month, calendar: calendar)
+        let currentCycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
+        let cycleStarts = [
+            currentCycleStart,
+            CycleDate.nextBoundary(after: now, payday: data.payday, calendar: calendar)
+        ]
+        for cycleStart in cycleStarts {
+            let cycleKey = data.cycleKey(for: cycleStart, calendar: calendar)
+            for item in data.items {
+                guard !data.isComplete(item.id, cycleKey: cycleKey) else { continue }
+                let due = CycleDate.dueDate(
+                    for: item,
+                    cycleStarting: cycleStart,
+                    calendar: calendar
+                )
                 var dates: [Date] = [due]
                 if item.leadDays > 0,
                    let early = calendar.date(byAdding: .day, value: -item.leadDays, to: due) {
@@ -199,7 +213,7 @@ enum LiveActivityManager {
             guard start > now.addingTimeInterval(30) else { return nil }
             return ScheduledEvent(
                 key: "relay-\(Int(start.timeIntervalSince1970))",
-                cycleKey: CycleDate.key(for: start, calendar: calendar),
+                cycleKey: data.cycleKey(for: start, calendar: calendar),
                 start: start,
                 subtitle: "고정 유지 모드 · 완료할 때까지 표시해요"
             )
@@ -216,7 +230,7 @@ enum LiveActivityManager {
             )
         }
         return SavingsChecklistAttributes.ContentState(
-            title: "이번 달 저축",
+            title: "이번 저축 주기",
             subtitle: subtitle,
             cycleKey: cycleKey,
             items: items

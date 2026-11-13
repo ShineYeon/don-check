@@ -6,7 +6,7 @@ DonCheck는 App Group `UserDefaults`에 `ChecklistData` 전체를 JSON `Data`로
 
 ```text
 Suite: group.com.heeyeon.DonCheck
-Key:   checklist-data-v1
+Key:   checklist-data-v2
 Value: JSONEncoder로 인코딩한 Data
 ```
 
@@ -20,6 +20,7 @@ Value: JSONEncoder로 인코딩한 Data
 struct ChecklistData: Codable {
     var items: [SavingsItem]
     var completions: [CompletionRecord]
+    var payday: Int
 }
 ```
 
@@ -43,10 +44,11 @@ struct ChecklistData: Codable {
   "completions": [
     {
       "itemID": "B0E9D05A-8B35-4C34-AE81-CC2D3059C71A",
-      "cycleKey": "2026-11",
+      "cycleKey": "2026-11-25",
       "completedAt": 815123456
     }
-  ]
+  ],
+  "payday": 25
 }
 ```
 
@@ -65,7 +67,7 @@ struct ChecklistData: Codable {
 ### save
 
 1. `JSONEncoder`로 전체 객체 encode
-2. defaults의 `checklist-data-v1` key에 저장
+2. defaults의 `checklist-data-v2` key에 저장
 
 encode 실패는 현재 무시한다. 모든 필드가 표준 Codable 타입이므로 일반 상태에서 실패하지 않지만 운영 진단을 위해 logging을 추가할 수 있다.
 
@@ -117,18 +119,20 @@ suite를 만들 수 없으면 standard defaults로 fallback한다. 앱 단독 �
 
 ## 6. Schema version
 
-현재 저장 key suffix가 사실상의 schema version이다.
+저장 key suffix가 사실상의 schema version이다.
 
 ```text
-checklist-data-v1
+checklist-data-v2
 ```
 
-모델 필드를 non-optional로 추가하면 기존 JSON decode가 실패할 수 있다. 안전한 변경 패턴:
+v2는 `payday`와 시작일 기반 `yyyy-MM-dd` 주기 키를 도입했다. v2가 없고 v1이 존재하면 repository가 다음 migration을 한 번 수행한다.
 
-- 새 필드를 optional로 추가
-- custom `init(from:)`에서 기본값 제공
-- `checklist-data-v2`로 migrate
-- 이전 payload를 decode한 후 새 schema로 변환
+1. v1 payload decode
+2. `payday = 1` 적용
+3. `yyyy-MM` completion key를 `yyyy-MM-01`로 변환
+4. v2 key에 저장
+
+`ChecklistData.init(from:)`도 `payday`가 없는 payload에 1을 적용한다. v1 key는 migration 후에도 즉시 삭제하지 않아 복구 여지를 남기지만 이후 읽기와 쓰기는 v2를 우선한다.
 
 ActivityKit attributes는 `UserDefaults`와 별도로 시스템이 보존할 수 있다. `scheduledStart`를 optional로 둔 이유도 이전 activity payload와의 호환성 때문이다.
 

@@ -32,7 +32,7 @@
 
 ### Features
 
-- [checklist.md](features/checklist.md): 항목 CRUD, 월 키, 완료 기록, 월말 보정
+- [checklist.md](features/checklist.md): 항목 CRUD, 월급 주기 키, 완료 기록, 월말 보정
 - [app-ui.md](features/app-ui.md): SwiftUI 화면, 입력 검증, observable state
 - [notifications.md](features/notifications.md): 로컬 알림 생성과 액션 처리
 - [live-activity.md](features/live-activity.md): ActivityKit 모델, 릴레이 유지, UI와 제약

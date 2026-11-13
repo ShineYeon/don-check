@@ -2,7 +2,7 @@
 
 ## 1. 개요
 
-`DonCheckWidget`은 월별 체크 상태를 glanceable UI로 제공한다. WidgetKit extension은 앱과 별도 프로세스에서 실행되며 App Group 저장소를 직접 읽는다.
+`DonCheckWidget`은 현재 월급 주기의 체크 상태를 glanceable UI로 제공한다. WidgetKit extension은 앱과 별도 프로세스에서 실행되며 App Group 저장소를 직접 읽는다.
 
 구현 파일:
 
@@ -22,7 +22,7 @@ struct ChecklistEntry: TimelineEntry {
 }
 ```
 
-entry는 렌더링 시점의 전체 checklist snapshot과 월 키를 포함한다.
+entry는 렌더링 시점의 전체 checklist snapshot과 월급 주기 키를 포함한다.
 
 ### Placeholder
 
@@ -35,9 +35,9 @@ gallery placeholder는 청약저축과 연금저축 sample을 사용한다. 실�
 
 ### Timeline
 
-현재 entry 한 개를 만들고 다음 자정 이후 reload하도록 `.after(nextMidnight)` policy를 반환한다. 자정 reload는 cycle key가 새 월로 전환되는 데 필요하다.
+현재 entry 한 개를 만들고 다음 월급일 00:00 이후 reload하도록 `.after(nextPayday)` policy를 반환한다. 이 reload는 cycle key가 새 월급 주기로 전환되는 데 필요하다.
 
-사용자가 앱 또는 intent로 상태를 변경하면 `WidgetCenter.shared.reloadAllTimelines()`를 별도로 호출하므로 자정까지 기다리지 않는다.
+사용자가 앱 또는 intent로 상태나 월급일을 변경하면 `WidgetCenter.shared.reloadAllTimelines()`를 별도로 호출하므로 다음 경계까지 기다리지 않는다.
 
 ## 3. 지원 family
 
@@ -72,7 +72,7 @@ gallery placeholder는 청약저축과 연금저축 sample을 사용한다. 실�
 
 ### accessoryRectangular
 
-- 이번 달 저축 제목
+- 이번 저축 주기 제목
 - 미완료 개수와 compact amount
 - progress bar
 
@@ -118,7 +118,7 @@ repository는 suite 생성 실패 시 `.standard`로 fallback한다. 앱과 widg
 
 위젯은 다음 상황에서 갱신된다.
 
-- 다음 자정 timeline policy 도달
+- 다음 월급일 timeline policy 도달
 - 앱에서 item 저장/삭제/토글
 - 위젯 또는 Live Activity intent 실행
 - 시스템이 snapshot/timeline을 다시 요청
@@ -139,7 +139,7 @@ WidgetKit refresh 시점은 최종적으로 시스템이 조정한다. `reloadAl
 
 1. 홈 화면 빈 영역 길게 누르기
 2. 위젯 추가
-3. `돈 체크` 또는 `이번 달 저축` 검색
+3. `돈 체크` 또는 `저축 체크리스트` 검색
 4. 원하는 크기 선택
 
 ### 잠금 화면
@@ -156,7 +156,8 @@ WidgetKit refresh 시점은 최종적으로 시스템이 조정한다. `reloadAl
 - 빈 데이터 placeholder가 아니라 empty message 표시
 - 0/0 progress에서 division-by-zero 없음
 - medium 3개, large 7개 truncation
-- 자정 전후 cycle key 변경
+- 월급일 00:00 전후 cycle key 변경
+- 월급일 29~31일의 짧은 달 말일 보정
 - 앱 체크 후 widget reload
 - widget 체크 후 앱 foreground reload
 - App Group capability 제거 시 데이터 불일치 재현
