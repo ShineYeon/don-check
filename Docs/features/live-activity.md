@@ -42,6 +42,8 @@ struct ContentState: Codable, Hashable {
 
 Content state에는 렌더링과 체크 intent에 필요한 월급 주기 키와 항목 snapshot을 넣는다. `remainingCount`, `completedCount`, `remainingAmount`는 computed property다.
 
+각 `LiveChecklistItem`은 `requiresAutomaticTransferConfirmation`, `isDepositComplete`, `isAutomaticTransferComplete`를 포함한다. 이전 active payload의 단일 `isComplete` 값은 호환 decoder에서 입금 완료로 해석한다.
+
 ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목을 payload에 넣지만 UI에는 일부만 표시한다. 항목 수가 커질 경우 미완료 상위 N개와 요약 값만 보내는 방식으로 변경해야 한다.
 
 ## 3. Presentation
@@ -64,6 +66,8 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 - leading: checkmark icon
 - trailing: 미완료 개수
 
+단계별 입금/저축 집계와 DonCheck 전용 leading icon으로 바꾸는 디자인은 [제품 로드맵 NEXT-003](../product/roadmap.md#next-003-dynamic-island-단계별-요약-디자인)에 정의되어 있으며 아직 구현 전이다.
+
 ### Dynamic Island minimal
 
 원형 mint background에 미완료 개수를 표시한다. 다른 Live Activity가 동시에 있을 때 시스템이 minimal presentation을 사용할 수 있다.
@@ -76,10 +80,10 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 
 ## 4. 사용자 상호작용
 
-각 row는 `ToggleSavingsItemIntent`를 실행한다. 이 intent는 `LiveActivityIntent`를 채택하며 다음 작업을 수행한다.
+각 row는 `입금` 버튼과 필요한 경우 `저축` 버튼을 표시하고, 선택한 단계와 함께 `ToggleSavingsItemIntent`를 실행한다. 이 intent는 `LiveActivityIntent`를 채택하며 다음 작업을 수행한다.
 
-1. repository에서 해당 item/month 상태 변경
-2. 완료 처리라면 해당 월급 주기 item 알림 제거
+1. repository에서 해당 item/cycle/step 상태 변경
+2. 완료 처리라면 해당 월급 주기와 단계의 알림 제거
 3. 전체 알림 재예약
 4. Live Activity refresh
 5. 일반 widget timeline reload

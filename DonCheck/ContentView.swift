@@ -12,7 +12,10 @@ struct ContentView: View {
             List {
                 Section {
                     SummaryCard(
-                        completed: store.completedCount,
+                        depositCompleted: store.depositCompletedCount,
+                        transferCompleted: store.automaticTransferCompletedCount,
+                        transferTotal: store.automaticTransferItemCount,
+                        fullyCompleted: store.completedCount,
                         total: store.data.items.count,
                         remainingAmount: store.remainingAmount
                     )
@@ -29,11 +32,18 @@ struct ContentView: View {
                         )
                     } else {
                         ForEach(store.data.items) { item in
-                            SavingsItemRow(item: item, isComplete: store.isComplete(item)) {
-                                withAnimation(.snappy) { store.toggle(item) }
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture { editorItem = item }
+                            SavingsItemRow(
+                                item: item,
+                                depositComplete: store.isStepComplete(item, step: .deposit),
+                                transferComplete: store.isStepComplete(item, step: .automaticTransfer),
+                                toggleDeposit: {
+                                    withAnimation(.snappy) { store.toggle(item, step: .deposit) }
+                                },
+                                toggleTransfer: {
+                                    withAnimation(.snappy) { store.toggle(item, step: .automaticTransfer) }
+                                },
+                                edit: { editorItem = item }
+                            )
                         }
                         .onDelete(perform: store.delete)
                     }
@@ -78,12 +88,15 @@ struct ContentView: View {
 }
 
 private struct SummaryCard: View {
-    let completed: Int
+    let depositCompleted: Int
+    let transferCompleted: Int
+    let transferTotal: Int
+    let fullyCompleted: Int
     let total: Int
     let remainingAmount: Int
 
     private var progress: Double {
-        total == 0 ? 0 : Double(completed) / Double(total)
+        total == 0 ? 0 : Double(fullyCompleted) / Double(total)
     }
 
     var body: some View {
@@ -97,9 +110,14 @@ private struct SummaryCard: View {
                         .font(.system(.title, design: .rounded, weight: .bold))
                 }
                 Spacer()
-                Text("\(completed)/\(total)")
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("입금 \(depositCompleted)/\(total)")
+                    if transferTotal > 0 {
+                        Text("저축 \(transferCompleted)/\(transferTotal)")
+                    }
+                }
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
             }
             ProgressView(value: progress)
                 .tint(.mint)
@@ -113,31 +131,66 @@ private struct SummaryCard: View {
 
 private struct SavingsItemRow: View {
     let item: SavingsItem
-    let isComplete: Bool
-    let toggle: () -> Void
+    let depositComplete: Bool
+    let transferComplete: Bool
+    let toggleDeposit: () -> Void
+    let toggleTransfer: () -> Void
+    let edit: () -> Void
+
+    private var isComplete: Bool {
+        depositComplete && (!item.requiresAutomaticTransferConfirmation || transferComplete)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: toggle) {
-                Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(isComplete ? .mint : .secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: edit) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.name)
+                            .strikethrough(isComplete)
+                            .foregroundStyle(isComplete ? .secondary : .primary)
+                        Text("매월 \(item.debitDay)일 · \(String(format: "%02d:%02d", item.reminderHour, item.reminderMinute))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(item.amount, format: .currency(code: "KRW").precision(.fractionLength(0)))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isComplete ? .secondary : .primary)
+                }
             }
             .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.name)
-                    .strikethrough(isComplete)
-                    .foregroundStyle(isComplete ? .secondary : .primary)
-                Text("매월 \(item.debitDay)일 · \(String(format: "%02d:%02d", item.reminderHour, item.reminderMinute))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 16) {
+                StepCheckButton(
+                    title: "입금 완료",
+                    isComplete: depositComplete,
+                    action: toggleDeposit
+                )
+                if item.requiresAutomaticTransferConfirmation {
+                    StepCheckButton(
+                        title: "저축 완료",
+                        isComplete: transferComplete,
+                        action: toggleTransfer
+                    )
+                }
             }
-            Spacer()
-            Text(item.amount, format: .currency(code: "KRW").precision(.fractionLength(0)))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isComplete ? .secondary : .primary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+    }
+}
+
+private struct StepCheckButton: View {
+    let title: String
+    let isComplete: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: isComplete ? "checkmark.circle.fill" : "circle")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(isComplete ? .mint : .secondary)
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -9,21 +9,29 @@ struct ToggleSavingsItemIntent: LiveActivityIntent {
 
     @Parameter(title: "항목 ID") var itemID: String
     @Parameter(title: "주기") var cycleKey: String
+    @Parameter(title: "완료 단계") var step: String
     @Parameter(title: "완료") var nextValue: Bool
 
     init() {}
 
-    init(itemID: String, cycleKey: String, nextValue: Bool) {
+    init(itemID: String, cycleKey: String, step: CompletionStep, nextValue: Bool) {
         self.itemID = itemID
         self.cycleKey = cycleKey
+        self.step = step.rawValue
         self.nextValue = nextValue
     }
 
     func perform() async throws -> some IntentResult {
-        guard let id = UUID(uuidString: itemID) else { return .result() }
-        let data = ChecklistRepository.shared.setCompletion(itemID: id, cycleKey: cycleKey, isComplete: nextValue)
+        guard let id = UUID(uuidString: itemID),
+              let completionStep = CompletionStep(rawValue: step) else { return .result() }
+        let data = ChecklistRepository.shared.setCompletion(
+            itemID: id,
+            cycleKey: cycleKey,
+            step: completionStep,
+            isComplete: nextValue
+        )
         if nextValue {
-            await NotificationScheduler.cancel(itemID: id, cycleKey: cycleKey)
+            await NotificationScheduler.cancel(itemID: id, cycleKey: cycleKey, step: completionStep)
         }
         await NotificationScheduler.rescheduleAll(data)
         await LiveActivityManager.refresh(data)

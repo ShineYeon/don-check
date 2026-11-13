@@ -28,10 +28,17 @@ final class ChecklistStore: ObservableObject {
 
     var cycleKey: String { data.cycleKey(for: .now) }
     var completedCount: Int { data.completedCount(cycleKey: cycleKey) }
+    var depositCompletedCount: Int { data.depositCompletedCount(cycleKey: cycleKey) }
+    var automaticTransferCompletedCount: Int { data.automaticTransferCompletedCount(cycleKey: cycleKey) }
+    var automaticTransferItemCount: Int { data.automaticTransferItemCount }
     var remainingAmount: Int { data.remainingAmount(cycleKey: cycleKey) }
 
     func isComplete(_ item: SavingsItem) -> Bool {
         data.isComplete(item.id, cycleKey: cycleKey)
+    }
+
+    func isStepComplete(_ item: SavingsItem, step: CompletionStep) -> Bool {
+        data.isStepComplete(item.id, cycleKey: cycleKey, step: step)
     }
 
     func reload() {
@@ -61,11 +68,18 @@ final class ChecklistStore: ObservableObject {
         persist()
     }
 
-    func toggle(_ item: SavingsItem) {
-        let next = !isComplete(item)
-        data.completions.removeAll { $0.itemID == item.id && $0.cycleKey == cycleKey }
+    func toggle(_ item: SavingsItem, step: CompletionStep) {
+        let next = !isStepComplete(item, step: step)
+        data.completions.removeAll {
+            $0.itemID == item.id && $0.cycleKey == cycleKey && $0.step == step
+        }
         if next {
-            data.completions.append(CompletionRecord(itemID: item.id, cycleKey: cycleKey, completedAt: .now))
+            data.completions.append(CompletionRecord(
+                itemID: item.id,
+                cycleKey: cycleKey,
+                step: step,
+                completedAt: .now
+            ))
         }
         persist()
     }

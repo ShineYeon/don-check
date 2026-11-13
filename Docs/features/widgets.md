@@ -63,7 +63,8 @@ gallery placeholder는 청약저축과 연금저축 sample을 사용한다. 실�
 - 제목, 완료/전체 개수
 - 진행률
 - 최대 3개 항목 row
-- row별 interactive check button
+- row별 `입금` interactive check button
+- 자동이체 확인 항목의 `저축` interactive check button
 
 ### systemLarge
 
@@ -89,11 +90,12 @@ medium/large row는 다음 intent를 실행한다.
 ToggleSavingsItemIntent(
     itemID: item.id.uuidString,
     cycleKey: entry.cycleKey,
+    step: .deposit,
     nextValue: !complete
 )
 ```
 
-intent가 `nextValue`를 명시적으로 받는 이유는 widget view가 일반 SwiftUI binding을 보유하지 못하기 때문이다. 렌더링 snapshot의 현재 상태를 바탕으로 다음 상태를 parameter로 만든다.
+intent는 `step`과 `nextValue`를 명시적으로 받는다. widget view가 일반 SwiftUI binding을 보유하지 못하므로 렌더링 snapshot의 단계별 현재 상태를 바탕으로 다음 상태를 parameter로 만든다.
 
 intent 완료 후 저장소와 timeline을 갱신하므로 toggle UI가 새 snapshot으로 수렴한다.
 
@@ -160,6 +162,7 @@ WidgetKit refresh 시점은 최종적으로 시스템이 조정한다. `reloadAl
 - 월급일 29~31일의 짧은 달 말일 보정
 - 앱 체크 후 widget reload
 - widget 체크 후 앱 foreground reload
+- 자동이체 항목의 입금/저축 버튼 독립 동작
 - App Group capability 제거 시 데이터 불일치 재현
 - light/dark/tinted widget appearance
 - 잠금 상태 authentication

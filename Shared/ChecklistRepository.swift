@@ -3,8 +3,8 @@ import Foundation
 final class ChecklistRepository {
     static let shared = ChecklistRepository()
 
-    private let dataKey = "checklist-data-v2"
-    private let legacyDataKey = "checklist-data-v1"
+    private let dataKey = "checklist-data-v3"
+    private let legacyDataKeys = ["checklist-data-v2", "checklist-data-v1"]
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -19,25 +19,31 @@ final class ChecklistRepository {
             return decoded
         }
 
-        guard let legacyEncoded = defaults.data(forKey: legacyDataKey),
-              var migrated = try? decoder.decode(ChecklistData.self, from: legacyEncoded) else {
-            return ChecklistData()
-        }
-
-        migrated.payday = 1
-        migrated.completions = migrated.completions.map { record in
-            guard record.cycleKey.split(separator: "-").count == 2,
-                  let month = CycleDate.date(for: record.cycleKey) else {
-                return record
+        for legacyDataKey in legacyDataKeys {
+            guard let legacyEncoded = defaults.data(forKey: legacyDataKey),
+                  var migrated = try? decoder.decode(ChecklistData.self, from: legacyEncoded) else {
+                continue
             }
-            return CompletionRecord(
-                itemID: record.itemID,
-                cycleKey: CycleDate.key(for: month, payday: migrated.payday),
-                completedAt: record.completedAt
-            )
+
+            if legacyDataKey == "checklist-data-v1" {
+                migrated.payday = 1
+                migrated.completions = migrated.completions.map { record in
+                    guard record.cycleKey.split(separator: "-").count == 2,
+                          let month = CycleDate.date(for: record.cycleKey) else {
+                        return record
+                    }
+                    return CompletionRecord(
+                        itemID: record.itemID,
+                        cycleKey: CycleDate.key(for: month, payday: migrated.payday),
+                        step: record.step,
+                        completedAt: record.completedAt
+                    )
+                }
+            }
+            save(migrated)
+            return migrated
         }
-        save(migrated)
-        return migrated
+        return ChecklistData()
     }
 
     func save(_ data: ChecklistData) {
@@ -46,11 +52,23 @@ final class ChecklistRepository {
     }
 
     @discardableResult
-    func setCompletion(itemID: UUID, cycleKey: String, isComplete: Bool) -> ChecklistData {
+    func setCompletion(
+        itemID: UUID,
+        cycleKey: String,
+        step: CompletionStep,
+        isComplete: Bool
+    ) -> ChecklistData {
         var data = load()
-        data.completions.removeAll { $0.itemID == itemID && $0.cycleKey == cycleKey }
+        data.completions.removeAll {
+            $0.itemID == itemID && $0.cycleKey == cycleKey && $0.step == step
+        }
         if isComplete {
-            data.completions.append(CompletionRecord(itemID: itemID, cycleKey: cycleKey, completedAt: .now))
+            data.completions.append(CompletionRecord(
+                itemID: itemID,
+                cycleKey: cycleKey,
+                step: step,
+                completedAt: .now
+            ))
         }
         save(data)
         return data

@@ -5,7 +5,73 @@ struct LiveChecklistItem: Codable, Hashable, Identifiable {
     var id: UUID
     var name: String
     var amount: Int
-    var isComplete: Bool
+    var requiresAutomaticTransferConfirmation: Bool
+    var isDepositComplete: Bool
+    var isAutomaticTransferComplete: Bool
+
+    var isComplete: Bool {
+        isDepositComplete &&
+            (!requiresAutomaticTransferConfirmation || isAutomaticTransferComplete)
+    }
+
+    init(
+        id: UUID,
+        name: String,
+        amount: Int,
+        requiresAutomaticTransferConfirmation: Bool,
+        isDepositComplete: Bool,
+        isAutomaticTransferComplete: Bool
+    ) {
+        self.id = id
+        self.name = name
+        self.amount = amount
+        self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
+        self.isDepositComplete = isDepositComplete
+        self.isAutomaticTransferComplete = isAutomaticTransferComplete
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case amount
+        case requiresAutomaticTransferConfirmation
+        case isDepositComplete
+        case isAutomaticTransferComplete
+        case isComplete
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        amount = try container.decode(Int.self, forKey: .amount)
+        requiresAutomaticTransferConfirmation = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .requiresAutomaticTransferConfirmation
+        ) ?? false
+        let legacyCompletion = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
+        isDepositComplete = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isDepositComplete
+        ) ?? legacyCompletion
+        isAutomaticTransferComplete = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isAutomaticTransferComplete
+        ) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(
+            requiresAutomaticTransferConfirmation,
+            forKey: .requiresAutomaticTransferConfirmation
+        )
+        try container.encode(isDepositComplete, forKey: .isDepositComplete)
+        try container.encode(isAutomaticTransferComplete, forKey: .isAutomaticTransferComplete)
+    }
 }
 
 struct SavingsChecklistAttributes: ActivityAttributes {
@@ -17,8 +83,17 @@ struct SavingsChecklistAttributes: ActivityAttributes {
 
         var remainingCount: Int { items.filter { !$0.isComplete }.count }
         var completedCount: Int { items.filter(\.isComplete).count }
+        var depositCompletedCount: Int { items.filter(\.isDepositComplete).count }
+        var automaticTransferItemCount: Int {
+            items.filter(\.requiresAutomaticTransferConfirmation).count
+        }
+        var automaticTransferCompletedCount: Int {
+            items.filter {
+                $0.requiresAutomaticTransferConfirmation && $0.isAutomaticTransferComplete
+            }.count
+        }
         var remainingAmount: Int {
-            items.filter { !$0.isComplete }.reduce(0) { $0 + $1.amount }
+            items.filter { !$0.isDepositComplete }.reduce(0) { $0 + $1.amount }
         }
     }
 
@@ -226,7 +301,13 @@ enum LiveActivityManager {
                 id: $0.id,
                 name: $0.name,
                 amount: $0.amount,
-                isComplete: data.isComplete($0.id, cycleKey: cycleKey)
+                requiresAutomaticTransferConfirmation: $0.requiresAutomaticTransferConfirmation,
+                isDepositComplete: data.isStepComplete($0.id, cycleKey: cycleKey, step: .deposit),
+                isAutomaticTransferComplete: data.isStepComplete(
+                    $0.id,
+                    cycleKey: cycleKey,
+                    step: .automaticTransfer
+                )
             )
         }
         return SavingsChecklistAttributes.ContentState(

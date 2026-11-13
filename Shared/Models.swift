@@ -9,6 +9,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
     var reminderMinute: Int
     var leadDays: Int
     var followUpCount: Int
+    var requiresAutomaticTransferConfirmation: Bool
     var createdAt: Date
 
     init(
@@ -20,6 +21,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         reminderMinute: Int = 0,
         leadDays: Int = 1,
         followUpCount: Int = 3,
+        requiresAutomaticTransferConfirmation: Bool = false,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -30,14 +32,73 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         self.reminderMinute = reminderMinute
         self.leadDays = leadDays
         self.followUpCount = followUpCount
+        self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
         self.createdAt = createdAt
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case amount
+        case debitDay
+        case reminderHour
+        case reminderMinute
+        case leadDays
+        case followUpCount
+        case requiresAutomaticTransferConfirmation
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        amount = try container.decode(Int.self, forKey: .amount)
+        debitDay = try container.decode(Int.self, forKey: .debitDay)
+        reminderHour = try container.decode(Int.self, forKey: .reminderHour)
+        reminderMinute = try container.decode(Int.self, forKey: .reminderMinute)
+        leadDays = try container.decode(Int.self, forKey: .leadDays)
+        followUpCount = try container.decode(Int.self, forKey: .followUpCount)
+        requiresAutomaticTransferConfirmation = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .requiresAutomaticTransferConfirmation
+        ) ?? false
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+}
+
+enum CompletionStep: String, Codable, CaseIterable, Hashable {
+    case deposit
+    case automaticTransfer
 }
 
 struct CompletionRecord: Codable, Hashable {
     var itemID: UUID
     var cycleKey: String
+    var step: CompletionStep = .deposit
     var completedAt: Date
+
+    init(itemID: UUID, cycleKey: String, step: CompletionStep = .deposit, completedAt: Date) {
+        self.itemID = itemID
+        self.cycleKey = cycleKey
+        self.step = step
+        self.completedAt = completedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case itemID
+        case cycleKey
+        case step
+        case completedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        itemID = try container.decode(UUID.self, forKey: .itemID)
+        cycleKey = try container.decode(String.self, forKey: .cycleKey)
+        step = try container.decodeIfPresent(CompletionStep.self, forKey: .step) ?? .deposit
+        completedAt = try container.decode(Date.self, forKey: .completedAt)
+    }
 }
 
 struct ChecklistData: Codable {
@@ -177,15 +238,41 @@ extension ChecklistData {
         CycleDate.key(for: date, payday: payday, calendar: calendar)
     }
 
+    func isStepComplete(_ itemID: UUID, cycleKey: String, step: CompletionStep) -> Bool {
+        completions.contains {
+            $0.itemID == itemID && $0.cycleKey == cycleKey && $0.step == step
+        }
+    }
+
     func isComplete(_ itemID: UUID, cycleKey: String) -> Bool {
-        completions.contains { $0.itemID == itemID && $0.cycleKey == cycleKey }
+        guard let item = items.first(where: { $0.id == itemID }) else { return false }
+        guard isStepComplete(itemID, cycleKey: cycleKey, step: .deposit) else { return false }
+        return !item.requiresAutomaticTransferConfirmation ||
+            isStepComplete(itemID, cycleKey: cycleKey, step: .automaticTransfer)
     }
 
     func remainingAmount(cycleKey: String) -> Int {
-        items.filter { !isComplete($0.id, cycleKey: cycleKey) }.reduce(0) { $0 + $1.amount }
+        items
+            .filter { !isStepComplete($0.id, cycleKey: cycleKey, step: .deposit) }
+            .reduce(0) { $0 + $1.amount }
     }
 
     func completedCount(cycleKey: String) -> Int {
         items.filter { isComplete($0.id, cycleKey: cycleKey) }.count
+    }
+
+    func depositCompletedCount(cycleKey: String) -> Int {
+        items.filter { isStepComplete($0.id, cycleKey: cycleKey, step: .deposit) }.count
+    }
+
+    func automaticTransferCompletedCount(cycleKey: String) -> Int {
+        items.filter {
+            $0.requiresAutomaticTransferConfirmation &&
+                isStepComplete($0.id, cycleKey: cycleKey, step: .automaticTransfer)
+        }.count
+    }
+
+    var automaticTransferItemCount: Int {
+        items.filter(\.requiresAutomaticTransferConfirmation).count
     }
 }

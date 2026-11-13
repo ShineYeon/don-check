@@ -31,15 +31,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == NotificationScheduler.completeAction,
-              let itemIDString = response.notification.request.content.userInfo["itemID"] as? String,
+        let step: CompletionStep
+        switch response.actionIdentifier {
+        case NotificationScheduler.depositCompleteAction,
+             NotificationScheduler.legacyCompleteAction:
+            step = .deposit
+        case NotificationScheduler.automaticTransferCompleteAction:
+            step = .automaticTransfer
+        default:
+            return
+        }
+
+        guard let itemIDString = response.notification.request.content.userInfo["itemID"] as? String,
               let itemID = UUID(uuidString: itemIDString),
               let cycleKey = response.notification.request.content.userInfo["cycleKey"] as? String else {
             return
         }
 
-        let data = ChecklistRepository.shared.setCompletion(itemID: itemID, cycleKey: cycleKey, isComplete: true)
-        await NotificationScheduler.cancel(itemID: itemID, cycleKey: cycleKey)
+        let data = ChecklistRepository.shared.setCompletion(
+            itemID: itemID,
+            cycleKey: cycleKey,
+            step: step,
+            isComplete: true
+        )
+        await NotificationScheduler.cancel(itemID: itemID, cycleKey: cycleKey, step: step)
         await NotificationScheduler.rescheduleAll(data)
         await LiveActivityManager.refresh(data)
         NotificationCenter.default.post(name: .checklistDidChange, object: nil)

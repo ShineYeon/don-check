@@ -41,6 +41,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
 | `reminderMinute` | 알림 분 | 0...59 |
 | `leadDays` | 출금 전 사전 알림 일수 | 0...14 |
 | `followUpCount` | 출금 후 일별 재알림 수 | 0...7 |
+| `requiresAutomaticTransferConfirmation` | 저축 완료 2단계 확인 여부 | Toggle |
 | `createdAt` | 생성 시각 | 자동 설정 |
 
 `amount`는 통화 소수점을 사용하지 않는다. 다른 통화를 지원하려면 통화 코드와 minor unit 정책을 모델에 추가해야 한다.
@@ -51,13 +52,14 @@ struct SavingsItem: Codable, Identifiable, Hashable {
 struct CompletionRecord: Codable, Hashable {
     var itemID: UUID
     var cycleKey: String
+    var step: CompletionStep
     var completedAt: Date
 }
 ```
 
 완료 상태를 `SavingsItem` 안의 Boolean으로 저장하지 않는다. 같은 항목이 매월 반복되므로 항목 정의와 월급 주기별 실행 기록을 분리한다.
 
-논리적 unique key는 `(itemID, cycleKey)`다. 저장 전에 동일 조합을 제거하므로 정상 경로에서는 한 건만 존재한다.
+`CompletionStep`은 `deposit`과 `automaticTransfer`를 가진다. 논리적 unique key는 `(itemID, cycleKey, step)`이다. 저장 전에 동일 조합을 제거하므로 단계별로 한 건만 존재한다.
 
 ## 3. 월급일과 주기 키
 
@@ -114,18 +116,26 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 
 앱 내부 토글은 현재 월급 주기 키를 사용한다.
 
-1. 동일 item/cycle 완료 기록 제거
+1. 동일 item/cycle/step 완료 기록 제거
 2. 다음 상태가 완료라면 새 `CompletionRecord` 추가
 3. 저장 및 파생 상태 재구성
 
-위젯과 Live Activity는 렌더링 당시의 `cycleKey`를 intent parameter로 전달한다. notification action도 payload에 들어 있던 `cycleKey`를 사용하므로 알림이 월급일 경계 후 늦게 눌려도 원래 대상 주기를 완료 처리한다.
+위젯과 Live Activity는 렌더링 당시의 `cycleKey`와 `step`을 intent parameter로 전달한다. notification action도 payload에 들어 있던 `cycleKey`와 action 종류를 사용하므로 알림이 월급일 경계 후 늦게 눌려도 원래 대상 주기의 정확한 단계를 완료 처리한다.
+
+최종 완료 계산:
+
+- 비자동이체 항목: `deposit` 완료
+- 자동이체 확인 항목: `deposit`과 `automaticTransfer` 모두 완료
+- `automaticTransfer`를 먼저 체크하는 것은 허용하지만 `deposit` 전에는 최종 완료가 아니다.
 
 ## 7. 집계 값
 
 `ChecklistData` extension이 다음 값을 계산한다.
 
 - `completedCount(cycleKey:)`: 완료된 항목 수
-- `remainingAmount(cycleKey:)`: 미완료 항목 amount 합계
+- `depositCompletedCount(cycleKey:)`: 입금 완료 항목 수
+- `automaticTransferCompletedCount(cycleKey:)`: 저축 완료 항목 수
+- `remainingAmount(cycleKey:)`: 입금 미완료 항목 amount 합계
 - `isComplete(_:cycleKey:)`: 개별 항목 완료 여부
 
 현재는 호출할 때마다 배열을 순회한다. 개인용 데이터 규모에서는 충분하지만 항목이나 history가 많아지면 completion lookup index를 만들 수 있다.
@@ -154,7 +164,7 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 
 ## 10. 향후 개선
 
-- 항목별 2단계 완료 체크는 [제품 로드맵](../product/roadmap.md)에 요구사항과 migration 방향을 정리한다.
+- Dynamic Island 단계별 요약 개선은 [제품 로드맵](../product/roadmap.md)의 NEXT-003에 정리한다.
 - 월별 history 조회 UI
 - 완료 취소 audit 기록
 - 항목 순서 재정렬

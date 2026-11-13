@@ -135,6 +135,12 @@ followUpCount: 3
 - 이름 TextField
 - 금액 number TextField와 number pad
 
+`완료 단계`:
+
+- `자동이체 후 저축 완료 확인` Toggle
+- Toggle off: 입금 완료 하나로 최종 완료
+- Toggle on: 입금 완료와 저축 완료가 모두 필요
+
 `매월 일정`:
 
 - 출금일 Stepper 1...31
@@ -144,7 +150,7 @@ followUpCount: 3
 `완료하지 않았을 때`:
 
 - 재알림 Stepper 0...7
-- 체크 시 현재 주기 남은 알림 취소 안내
+- 단계 체크 시 해당 단계의 남은 알림 취소 안내
 
 ### 저장 검증
 

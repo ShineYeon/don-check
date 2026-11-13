@@ -6,7 +6,7 @@ DonCheck는 App Group `UserDefaults`에 `ChecklistData` 전체를 JSON `Data`로
 
 ```text
 Suite: group.com.heeyeon.DonCheck
-Key:   checklist-data-v2
+Key:   checklist-data-v3
 Value: JSONEncoder로 인코딩한 Data
 ```
 
@@ -38,6 +38,7 @@ struct ChecklistData: Codable {
       "reminderMinute": 0,
       "leadDays": 1,
       "followUpCount": 3,
+      "requiresAutomaticTransferConfirmation": true,
       "createdAt": 815000000
     }
   ],
@@ -45,6 +46,7 @@ struct ChecklistData: Codable {
     {
       "itemID": "B0E9D05A-8B35-4C34-AE81-CC2D3059C71A",
       "cycleKey": "2026-11-25",
+      "step": "deposit",
       "completedAt": 815123456
     }
   ],
@@ -67,7 +69,7 @@ struct ChecklistData: Codable {
 ### save
 
 1. `JSONEncoder`로 전체 객체 encode
-2. defaults의 `checklist-data-v2` key에 저장
+2. defaults의 `checklist-data-v3` key에 저장
 
 encode 실패는 현재 무시한다. 모든 필드가 표준 Codable 타입이므로 일반 상태에서 실패하지 않지만 운영 진단을 위해 logging을 추가할 수 있다.
 
@@ -76,7 +78,7 @@ encode 실패는 현재 무시한다. 모든 필드가 표준 Codable 타입이�
 위젯과 notification action처럼 `ChecklistStore`를 거치지 않는 경로에서 사용한다.
 
 1. 최신 데이터 load
-2. 동일 item/month completion 제거
+2. 동일 item/cycle/step completion 제거
 3. 완료 요청이면 새 record 추가
 4. save
 5. 변경된 전체 data 반환
@@ -122,17 +124,17 @@ suite를 만들 수 없으면 standard defaults로 fallback한다. 앱 단독 �
 저장 key suffix가 사실상의 schema version이다.
 
 ```text
-checklist-data-v2
+checklist-data-v3
 ```
 
-v2는 `payday`와 시작일 기반 `yyyy-MM-dd` 주기 키를 도입했다. v2가 없고 v1이 존재하면 repository가 다음 migration을 한 번 수행한다.
+v3는 `SavingsItem.requiresAutomaticTransferConfirmation`과 `CompletionRecord.step`을 도입했다. v3가 없으면 repository가 v2, v1 순서로 legacy payload를 찾아 migration한다.
 
-1. v1 payload decode
-2. `payday = 1` 적용
-3. `yyyy-MM` completion key를 `yyyy-MM-01`로 변환
-4. v2 key에 저장
+1. v2 항목은 `requiresAutomaticTransferConfirmation = false` 적용
+2. v2 completion은 `step = deposit` 적용
+3. v1은 추가로 `payday = 1`과 `yyyy-MM` → `yyyy-MM-01` 변환
+4. 결과를 v3 key에 저장
 
-`ChecklistData.init(from:)`도 `payday`가 없는 payload에 1을 적용한다. v1 key는 migration 후에도 즉시 삭제하지 않아 복구 여지를 남기지만 이후 읽기와 쓰기는 v2를 우선한다.
+각 모델의 custom decoder가 누락된 신규 필드에 호환 기본값을 적용한다. legacy key는 migration 후에도 즉시 삭제하지 않아 복구 여지를 남기지만 이후 읽기와 쓰기는 v3를 우선한다.
 
 ActivityKit attributes는 `UserDefaults`와 별도로 시스템이 보존할 수 있다. `scheduledStart`를 optional로 둔 이유도 이전 activity payload와의 호환성 때문이다.
 

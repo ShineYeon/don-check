@@ -98,7 +98,7 @@ sequenceDiagram
 
 ### 3.3 알림 액션에서 체크
 
-`AppDelegate.userNotificationCenter(_:didReceive:)`가 `DONCHECK_COMPLETE` 액션을 받는다. notification `userInfo`에 들어 있는 `itemID`와 `cycleKey`로 완료 기록을 저장한 뒤 알림과 Live Activity를 다시 구성한다.
+`AppDelegate.userNotificationCenter(_:didReceive:)`가 입금 또는 저축 완료 액션을 받는다. action ID와 notification `userInfo`에 들어 있는 `itemID`, `cycleKey`로 단계별 완료 기록을 저장한 뒤 알림과 Live Activity를 다시 구성한다.
 
 앱 화면이 실행 중인 경우 `.checklistDidChange` notification을 통해 `ChecklistStore.reload()`를 호출한다.
 
@@ -110,7 +110,7 @@ sequenceDiagram
 
 1. 공유 저장소가 canonical state다.
 2. 파생 값인 pending notification, badge, widget timeline, Live Activity는 언제든 재생성할 수 있다.
-3. 항목 체크는 동일 `(itemID, cycleKey)` 완료 기록을 먼저 제거한 뒤 필요하면 한 건만 추가한다.
+3. 항목 체크는 동일 `(itemID, cycleKey, step)` 완료 기록을 먼저 제거한 뒤 필요하면 한 건만 추가한다.
 4. 앱 UI는 foreground 진입 시 저장소를 reload한다.
 5. 위젯은 timeline 생성 시 저장소를 직접 load한다.
 

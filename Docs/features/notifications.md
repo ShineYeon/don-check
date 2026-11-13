@@ -31,27 +31,33 @@ DonCheck의 일반 알림은 `UserNotifications` framework로 기기 내부에�
 ### Category와 Action
 
 ```text
-Category ID: DONCHECK_ITEM
-Action ID:   DONCHECK_COMPLETE
-Action title: 입금 완료
+입금 Category ID: DONCHECK_DEPOSIT_ITEM
+입금 Action ID:   DONCHECK_DEPOSIT_COMPLETE
+입금 Action title: 입금 완료
+
+저축 Category ID: DONCHECK_TRANSFER_ITEM
+저축 Action ID:   DONCHECK_TRANSFER_COMPLETE
+저축 Action title: 저축 완료
 ```
 
 category는 앱 launch 시 `AppDelegate.application(_:didFinishLaunchingWithOptions:)`에서 등록하고, 권한 요청 시에도 다시 등록한다.
+
+업데이트 전에 이미 전달된 알림을 위해 legacy `DONCHECK_ITEM`/`DONCHECK_COMPLETE`도 등록하며, 해당 action은 `deposit` 단계로 처리한다. 새 request에는 legacy category를 사용하지 않는다.
 
 ### Request ID
 
 알림 request identifier 형식:
 
 ```text
-doncheck.<itemUUID>.<cycleKey>.<kind>
+doncheck.<itemUUID>.<cycleKey>.<step>.<kind>
 ```
 
 예:
 
 ```text
-doncheck.6C96...A21.2026-11.early
-doncheck.6C96...A21.2026-11.due
-doncheck.6C96...A21.2026-11.followup-1
+doncheck.6C96...A21.2026-11-25.deposit.early
+doncheck.6C96...A21.2026-11-25.deposit.due
+doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 ```
 
 `AppConfig.notificationPrefix`는 `doncheck.`다. 전체 재예약 시 이 prefix를 가진 request만 제거하므로 다른 기능의 알림을 실수로 삭제하지 않는다.
@@ -65,17 +71,25 @@ doncheck.6C96...A21.2026-11.followup-1
 - 문구: `출금 전에 입금할 때예요`
 - interruption level: `.active`
 
-### 4.2 출금일 알림
+### 4.2 입금 확인 알림
 
 - 조건: 현재 시각보다 미래인 출금일 시각
-- 문구: `오늘 출금 예정이에요`
+- 문구: `자동이체 계좌의 입금을 확인하세요`
 - interruption level: `.timeSensitive`
 
-### 4.3 재알림
+### 4.3 저축 완료 확인 알림
+
+- 조건: `requiresAutomaticTransferConfirmation == true`
+- 시각: 출금일의 reminder hour/minute
+- 문구: `자동이체가 완료됐는지 확인하세요`
+- action: `저축 완료`
+- interruption level: `.timeSensitive`
+
+### 4.4 재알림
 
 - 조건: 알림 대상 월급 주기의 항목이 미완료이며 `followUpCount > 0`
 - 시각: 출금일 이후 1일부터 `followUpCount`일까지 같은 시각
-- 문구: `아직 완료하지 않은 저축 항목이에요`
+- 문구: 단계에 따라 입금 미완료 또는 저축 완료 미확인 안내
 - interruption level: `.timeSensitive`
 
 다음 월급 주기의 출금 건에 대해서는 사전 알림과 출금일 알림만 미리 만든다. 다음 주기의 재알림은 그 주기가 현재 주기가 되어 다시 schedule될 때 생성한다.
@@ -86,8 +100,8 @@ doncheck.6C96...A21.2026-11.followup-1
 
 1. 시스템에서 pending notification request를 조회한다.
 2. identifier가 `doncheck.`로 시작하는 request를 제거한다.
-3. 현재 월급 주기 안에서 항목별 출금일을 계산하고 미완료 항목에 대해 early/due/follow-up 후보를 생성한다.
-4. 다음 월급 주기 안에서 항목별 출금일을 계산하고 미완료 항목에 대해 early/due 후보를 생성한다.
+3. 현재 월급 주기 안에서 항목별 출금일을 계산하고 미완료 단계별 early/due/follow-up 후보를 생성한다.
+4. 다음 월급 주기 안에서 항목별 출금일을 계산하고 미완료 단계별 early/due 후보를 생성한다.
 5. 이미 지난 후보를 제거한다.
 6. 날짜 오름차순으로 정렬한다.
 7. 가장 가까운 60개를 시스템에 등록한다.
@@ -97,7 +111,7 @@ doncheck.6C96...A21.2026-11.followup-1
 
 ## 6. 완료 시 취소
 
-`cancel(itemID:cycleKey:)`는 pending과 delivered notification을 각각 조회한다. 대상 item/cycle identifier prefix를 가진 알림만 제거한다.
+`cancel(itemID:cycleKey:step:)`는 pending과 delivered notification을 각각 조회한다. 대상 item/cycle/step identifier prefix를 가진 알림만 제거한다. 입금 완료가 저축 완료 확인 알림을 지우거나 반대 단계가 지워지지 않는다.
 
 delivered notification은 pending 목록에 존재하지 않기 때문에 두 목록을 모두 조회해야 한다. 이 구분을 제거하면 체크 후에도 Notification Center에 이미 전달된 알림이 남을 수 있다.
 
@@ -112,14 +126,15 @@ notification content의 `userInfo`에는 다음 값이 들어간다.
 ```swift
 [
     "itemID": item.id.uuidString,
-    "cycleKey": "2026-11-25"
+    "cycleKey": "2026-11-25",
+    "step": "deposit"
 ]
 ```
 
-사용자가 `입금 완료`를 누르면 `AppDelegate`가 payload를 검증한 후 다음 순서로 처리한다.
+사용자가 `입금 완료` 또는 `저축 완료`를 누르면 `AppDelegate`가 action ID로 단계를 결정하고 payload를 검증한 후 다음 순서로 처리한다.
 
-1. repository에 해당 item/month 완료 기록 저장
-2. 해당 알림 pending/delivered 제거
+1. repository에 해당 item/cycle/step 완료 기록 저장
+2. 해당 단계의 pending/delivered 알림 제거
 3. 전체 알림 재예약
 4. Live Activity refresh
 5. 실행 중 앱에 `.checklistDidChange` 전파

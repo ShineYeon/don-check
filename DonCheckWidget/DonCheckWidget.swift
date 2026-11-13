@@ -105,25 +105,39 @@ private struct ChecklistWidgetView: View {
                     Spacer()
                 } else {
                     ForEach(Array(entry.data.items.prefix(family == .systemLarge ? 7 : 3))) { item in
-                        let complete = entry.data.isComplete(item.id, cycleKey: entry.cycleKey)
-                        Button(intent: ToggleSavingsItemIntent(
-                            itemID: item.id.uuidString,
+                        let depositComplete = entry.data.isStepComplete(
+                            item.id,
                             cycleKey: entry.cycleKey,
-                            nextValue: !complete
-                        )) {
-                            HStack(spacing: 7) {
-                                Image(systemName: complete ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(complete ? .mint : .secondary)
-                                Text(item.name)
-                                    .lineLimit(1)
-                                    .strikethrough(complete)
-                                Spacer()
-                                Text(item.amount, format: .number.notation(.compactName))
-                                    .foregroundStyle(.secondary)
+                            step: .deposit
+                        )
+                        let transferComplete = entry.data.isStepComplete(
+                            item.id,
+                            cycleKey: entry.cycleKey,
+                            step: .automaticTransfer
+                        )
+                        HStack(spacing: 6) {
+                            Text(item.name)
+                                .lineLimit(1)
+                                .strikethrough(entry.data.isComplete(item.id, cycleKey: entry.cycleKey))
+                            Spacer(minLength: 2)
+                            WidgetStepButton(
+                                title: "입금",
+                                item: item,
+                                cycleKey: entry.cycleKey,
+                                step: .deposit,
+                                isComplete: depositComplete
+                            )
+                            if item.requiresAutomaticTransferConfirmation {
+                                WidgetStepButton(
+                                    title: "저축",
+                                    item: item,
+                                    cycleKey: entry.cycleKey,
+                                    step: .automaticTransfer,
+                                    isComplete: transferComplete
+                                )
                             }
-                            .font(.caption)
                         }
-                        .buttonStyle(.plain)
+                        .font(.caption)
                     }
                     Spacer(minLength: 0)
                 }
@@ -136,6 +150,32 @@ private struct ChecklistWidgetView: View {
     private var remainingAmount: Int { entry.data.remainingAmount(cycleKey: entry.cycleKey) }
     private var progress: Double {
         entry.data.items.isEmpty ? 0 : Double(completedCount) / Double(entry.data.items.count)
+    }
+}
+
+private struct WidgetStepButton: View {
+    let title: String
+    let item: SavingsItem
+    let cycleKey: String
+    let step: CompletionStep
+    let isComplete: Bool
+
+    var body: some View {
+        Button(intent: ToggleSavingsItemIntent(
+            itemID: item.id.uuidString,
+            cycleKey: cycleKey,
+            step: step,
+            nextValue: !isComplete
+        )) {
+            VStack(spacing: 1) {
+                Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
+                Text(title)
+                    .font(.system(size: 8, weight: .medium))
+            }
+            .foregroundStyle(isComplete ? .mint : .secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title) \(isComplete ? "완료" : "미완료")")
     }
 }
 

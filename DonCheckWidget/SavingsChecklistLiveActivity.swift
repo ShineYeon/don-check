@@ -86,23 +86,48 @@ private struct ChecklistActivityRow: View {
     let cycleKey: String
 
     var body: some View {
-        Button(intent: ToggleSavingsItemIntent(
-            itemID: item.id.uuidString,
-            cycleKey: cycleKey,
-            nextValue: !item.isComplete
-        )) {
-            HStack(spacing: 8) {
-                Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(item.isComplete ? .mint : .secondary)
-                Text(item.name)
-                    .lineLimit(1)
-                    .strikethrough(item.isComplete)
-                Spacer()
-                Text(item.amount, format: .number.notation(.compactName))
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Text(item.name)
+                .lineLimit(1)
+                .strikethrough(item.isComplete)
+            Spacer(minLength: 4)
+            ActivityStepButton(
+                title: "입금",
+                itemID: item.id,
+                cycleKey: cycleKey,
+                step: .deposit,
+                isComplete: item.isDepositComplete
+            )
+            if item.requiresAutomaticTransferConfirmation {
+                ActivityStepButton(
+                    title: "저축",
+                    itemID: item.id,
+                    cycleKey: cycleKey,
+                    step: .automaticTransfer,
+                    isComplete: item.isAutomaticTransferComplete
+                )
             }
-            .font(.caption)
-            .contentShape(Rectangle())
+        }
+        .font(.caption)
+    }
+}
+
+private struct ActivityStepButton: View {
+    let title: String
+    let itemID: UUID
+    let cycleKey: String
+    let step: CompletionStep
+    let isComplete: Bool
+
+    var body: some View {
+        Button(intent: ToggleSavingsItemIntent(
+            itemID: itemID.uuidString,
+            cycleKey: cycleKey,
+            step: step,
+            nextValue: !isComplete
+        )) {
+            Label(title, systemImage: isComplete ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isComplete ? .mint : .secondary)
         }
         .buttonStyle(.plain)
     }

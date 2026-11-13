@@ -22,6 +22,15 @@ struct ItemEditorView: View {
                         .keyboardType(.numberPad)
                 }
 
+                Section("완료 단계") {
+                    Toggle("자동이체 후 저축 완료 확인", isOn: $draft.requiresAutomaticTransferConfirmation)
+                    Text(draft.requiresAutomaticTransferConfirmation
+                         ? "입금 완료와 저축 완료를 각각 체크합니다."
+                         : "입금 완료만 체크하면 이 항목이 완료됩니다.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("매월 일정") {
                     Stepper("출금일: \(draft.debitDay)일", value: $draft.debitDay, in: 1...31)
                     DatePicker(
@@ -42,7 +51,7 @@ struct ItemEditorView: View {
                         value: $draft.followUpCount,
                         in: 0...7
                     )
-                    Text("체크하면 현재 저축 주기의 남은 알림은 자동으로 취소됩니다.")
+                    Text("각 단계를 체크하면 해당 단계의 남은 알림은 자동으로 취소됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

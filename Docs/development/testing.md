@@ -69,9 +69,12 @@ git diff --check
 
 ### 완료
 
-- 앱에서 완료/취소
+- 비자동이체 항목의 입금 완료/취소
+- 자동이체 항목의 입금 완료/취소
+- 자동이체 항목의 저축 완료/취소
+- 저축 완료를 먼저 체크해도 입금 전에는 최종 미완료
 - 남은 금액 업데이트
-- 완료/전체 개수 업데이트
+- 입금/저축/최종 완료 개수 업데이트
 - badge 업데이트
 - widget과 Live Activity 업데이트
 
@@ -102,6 +105,8 @@ git diff --check
 - 이미 지난 request 미생성
 - 완료 시 pending/delivered 제거
 - notification action으로 완료
+- 입금 완료 action이 입금 단계만 변경
+- 저축 완료 action이 저축 단계만 변경
 - foreground banner 표시
 - time-sensitive 설정 비활성화 상태
 - 후보 60개 초과 시 가까운 순서 유지
@@ -120,6 +125,7 @@ let requests = await UNUserNotificationCenter.current().pendingNotificationReque
 - 빈 목록 UI
 - 표시 개수 truncation
 - 위젯 버튼 완료 처리
+- 위젯의 입금/저축 단계별 버튼
 - 앱으로 복귀했을 때 최신 상태 reload
 - 월급일 00:00 이후 cycle 변경
 - dark mode와 tinted appearance
@@ -140,6 +146,7 @@ let requests = await UNUserNotificationCenter.current().pendingNotificationReque
 - Dynamic Island compact/minimal/expanded
 - 금액과 미완료 개수
 - row 체크 interaction
+- row의 입금/저축 단계별 intent
 
 ### 릴레이
 
