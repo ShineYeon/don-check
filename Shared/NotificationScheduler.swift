@@ -62,8 +62,18 @@ enum NotificationScheduler {
         center.removePendingNotificationRequests(withIdentifiers: ownIDs)
 
         let calendar = Calendar.current
-        let currentCycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
-        let nextCycleStart = CycleDate.nextBoundary(after: now, payday: data.payday, calendar: calendar)
+        let currentCycleStart = CycleDate.start(
+            for: now,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
+        let nextCycleStart = CycleDate.nextBoundary(
+            after: now,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
         var candidates: [(Date, UNNotificationRequest)] = []
 
         for item in data.items {
@@ -78,6 +88,7 @@ enum NotificationScheduler {
                     for: item,
                     due: currentDue,
                     payday: data.payday,
+                    holidays: data.holidayDateSet,
                     step: .deposit,
                     includeFollowUps: true,
                     now: now,
@@ -86,10 +97,17 @@ enum NotificationScheduler {
             }
             if item.requiresAutomaticTransferConfirmation,
                !data.isStepComplete(item.id, cycleKey: currentKey, step: .automaticTransfer) {
+                let currentTransferDue = CycleDate.automaticTransferDate(
+                    for: item,
+                    cycleStarting: currentCycleStart,
+                    holidays: data.holidayDateSet,
+                    calendar: calendar
+                )
                 candidates += requests(
                     for: item,
-                    due: currentDue,
+                    due: currentTransferDue,
                     payday: data.payday,
+                    holidays: data.holidayDateSet,
                     step: .automaticTransfer,
                     includeFollowUps: true,
                     now: now,
@@ -108,6 +126,7 @@ enum NotificationScheduler {
                     for: item,
                     due: nextDue,
                     payday: data.payday,
+                    holidays: data.holidayDateSet,
                     step: .deposit,
                     includeFollowUps: false,
                     now: now,
@@ -116,10 +135,17 @@ enum NotificationScheduler {
             }
             if item.requiresAutomaticTransferConfirmation,
                !data.isStepComplete(item.id, cycleKey: nextKey, step: .automaticTransfer) {
+                let nextTransferDue = CycleDate.automaticTransferDate(
+                    for: item,
+                    cycleStarting: nextCycleStart,
+                    holidays: data.holidayDateSet,
+                    calendar: calendar
+                )
                 candidates += requests(
                     for: item,
-                    due: nextDue,
+                    due: nextTransferDue,
                     payday: data.payday,
+                    holidays: data.holidayDateSet,
                     step: .automaticTransfer,
                     includeFollowUps: false,
                     now: now,
@@ -174,12 +200,18 @@ enum NotificationScheduler {
         for item: SavingsItem,
         due: Date,
         payday: Int,
+        holidays: Set<String>,
         step: CompletionStep,
         includeFollowUps: Bool,
         now: Date,
         calendar: Calendar
     ) -> [(Date, UNNotificationRequest)] {
-        let key = CycleDate.key(for: due, payday: payday, calendar: calendar)
+        let key = CycleDate.key(
+            for: due,
+            payday: payday,
+            holidays: holidays,
+            calendar: calendar
+        )
         var dates: [(String, Date, String)] = []
 
         if step == .deposit,

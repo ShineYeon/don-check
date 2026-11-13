@@ -10,6 +10,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
     var leadDays: Int
     var followUpCount: Int
     var requiresAutomaticTransferConfirmation: Bool
+    var automaticTransferDay: Int
     var createdAt: Date
 
     init(
@@ -22,6 +23,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         leadDays: Int = 1,
         followUpCount: Int = 3,
         requiresAutomaticTransferConfirmation: Bool = false,
+        automaticTransferDay: Int? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -33,6 +35,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         self.leadDays = leadDays
         self.followUpCount = followUpCount
         self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
+        self.automaticTransferDay = min(max(automaticTransferDay ?? debitDay, 1), 31)
         self.createdAt = createdAt
     }
 
@@ -46,6 +49,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         case leadDays
         case followUpCount
         case requiresAutomaticTransferConfirmation
+        case automaticTransferDay
         case createdAt
     }
 
@@ -63,6 +67,10 @@ struct SavingsItem: Codable, Identifiable, Hashable {
             Bool.self,
             forKey: .requiresAutomaticTransferConfirmation
         ) ?? false
+        automaticTransferDay = min(max(
+            try container.decodeIfPresent(Int.self, forKey: .automaticTransferDay) ?? debitDay,
+            1
+        ), 31)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
@@ -105,17 +113,25 @@ struct ChecklistData: Codable {
     var items: [SavingsItem] = []
     var completions: [CompletionRecord] = []
     var payday: Int = 1
+    var holidayDates: [String] = []
 
-    init(items: [SavingsItem] = [], completions: [CompletionRecord] = [], payday: Int = 1) {
+    init(
+        items: [SavingsItem] = [],
+        completions: [CompletionRecord] = [],
+        payday: Int = 1,
+        holidayDates: [String] = []
+    ) {
         self.items = items
         self.completions = completions
         self.payday = Self.validPayday(payday)
+        self.holidayDates = Array(Set(holidayDates)).sorted()
     }
 
     private enum CodingKeys: String, CodingKey {
         case items
         case completions
         case payday
+        case holidayDates
     }
 
     init(from decoder: Decoder) throws {
@@ -123,6 +139,9 @@ struct ChecklistData: Codable {
         items = try container.decodeIfPresent([SavingsItem].self, forKey: .items) ?? []
         completions = try container.decodeIfPresent([CompletionRecord].self, forKey: .completions) ?? []
         payday = Self.validPayday(try container.decodeIfPresent(Int.self, forKey: .payday) ?? 1)
+        holidayDates = Array(Set(
+            try container.decodeIfPresent([String].self, forKey: .holidayDates) ?? []
+        )).sorted()
     }
 
     static func validPayday(_ day: Int) -> Int {
@@ -131,8 +150,13 @@ struct ChecklistData: Codable {
 }
 
 enum CycleDate {
-    static func key(for date: Date, payday: Int = 1, calendar: Calendar = .current) -> String {
-        let start = start(for: date, payday: payday, calendar: calendar)
+    static func key(
+        for date: Date,
+        payday: Int = 1,
+        holidays: Set<String> = [],
+        calendar: Calendar = .current
+    ) -> String {
+        let start = start(for: date, payday: payday, holidays: holidays, calendar: calendar)
         let components = calendar.dateComponents([.year, .month, .day], from: start)
         return String(
             format: "%04d-%02d-%02d",
@@ -154,23 +178,44 @@ enum CycleDate {
         ))
     }
 
-    static func start(for date: Date, payday: Int, calendar: Calendar = .current) -> Date {
+    static func start(
+        for date: Date,
+        payday: Int,
+        holidays: Set<String> = [],
+        calendar: Calendar = .current
+    ) -> Date {
         let today = calendar.startOfDay(for: date)
-        let thisMonthBoundary = boundary(
-            monthContaining: today,
-            payday: payday,
-            calendar: calendar
-        )
-        guard today < thisMonthBoundary else { return thisMonthBoundary }
-
-        let previousMonth = offset(-1, from: firstDayOfMonth(containing: today, calendar: calendar), calendar: calendar)
-        return boundary(monthContaining: previousMonth, payday: payday, calendar: calendar)
+        let month = firstDayOfMonth(containing: today, calendar: calendar)
+        let candidates = (-1...1).map { monthOffset in
+            let candidateMonth = offset(monthOffset, from: month, calendar: calendar)
+            return boundary(
+                monthContaining: candidateMonth,
+                payday: payday,
+                holidays: holidays,
+                calendar: calendar
+            )
+        }
+        return candidates.filter { $0 <= today }.max() ?? today
     }
 
-    static func nextBoundary(after date: Date, payday: Int, calendar: Calendar = .current) -> Date {
-        let currentStart = start(for: date, payday: payday, calendar: calendar)
-        let nextMonth = offset(1, from: firstDayOfMonth(containing: currentStart, calendar: calendar), calendar: calendar)
-        return boundary(monthContaining: nextMonth, payday: payday, calendar: calendar)
+    static func nextBoundary(
+        after date: Date,
+        payday: Int,
+        holidays: Set<String> = [],
+        calendar: Calendar = .current
+    ) -> Date {
+        let today = calendar.startOfDay(for: date)
+        let month = firstDayOfMonth(containing: today, calendar: calendar)
+        let candidates = (0...2).map { monthOffset in
+            let candidateMonth = offset(monthOffset, from: month, calendar: calendar)
+            return boundary(
+                monthContaining: candidateMonth,
+                payday: payday,
+                holidays: holidays,
+                calendar: calendar
+            )
+        }
+        return candidates.filter { $0 > today }.min() ?? offset(1, from: today, calendar: calendar)
     }
 
     static func offset(_ months: Int, from date: Date, calendar: Calendar = .current) -> Date {
@@ -207,18 +252,157 @@ enum CycleDate {
         return dueDate(for: item, monthContaining: nextMonth, calendar: calendar)
     }
 
-    private static func boundary(monthContaining date: Date, payday: Int, calendar: Calendar) -> Date {
+    static func automaticTransferDate(
+        for item: SavingsItem,
+        cycleStarting cycleStart: Date,
+        holidays: Set<String> = [],
+        calendar: Calendar = .current
+    ) -> Date {
+        let scheduled = scheduledDate(
+            day: item.automaticTransferDay,
+            hour: item.reminderHour,
+            minute: item.reminderMinute,
+            cycleStarting: cycleStart,
+            calendar: calendar
+        )
+        return nextBusinessDay(onOrAfter: scheduled, holidays: holidays, calendar: calendar)
+    }
+
+    static func dayKey(for date: Date, calendar: Calendar = .current) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    static func remapCycleKey(
+        _ key: String,
+        payday: Int,
+        from oldHolidays: Set<String>,
+        to newHolidays: Set<String>,
+        calendar: Calendar = .current
+    ) -> String {
+        guard let oldCycleStart = date(for: key, calendar: calendar) else { return key }
+        let referenceMonth = firstDayOfMonth(containing: oldCycleStart, calendar: calendar)
+        let nominalMonth = (-1...2)
+            .map { offset($0, from: referenceMonth, calendar: calendar) }
+            .first { candidateMonth in
+                dayKey(
+                    for: boundary(
+                        monthContaining: candidateMonth,
+                        payday: payday,
+                        holidays: oldHolidays,
+                        calendar: calendar
+                    ),
+                    calendar: calendar
+                ) == key
+            }
+
+        guard let nominalMonth else {
+            return self.key(
+                for: oldCycleStart,
+                payday: payday,
+                holidays: newHolidays,
+                calendar: calendar
+            )
+        }
+        return dayKey(
+            for: boundary(
+                monthContaining: nominalMonth,
+                payday: payday,
+                holidays: newHolidays,
+                calendar: calendar
+            ),
+            calendar: calendar
+        )
+    }
+
+    private static func boundary(
+        monthContaining date: Date,
+        payday: Int,
+        holidays: Set<String>,
+        calendar: Calendar
+    ) -> Date {
         let validPayday = ChecklistData.validPayday(payday)
         let monthRange = calendar.range(of: .day, in: .month, for: date)
         let day = min(validPayday, monthRange?.count ?? validPayday)
         let month = calendar.dateComponents([.year, .month], from: date)
-        return calendar.date(from: DateComponents(
+        let nominal = calendar.date(from: DateComponents(
             calendar: calendar,
             timeZone: calendar.timeZone,
             year: month.year,
             month: month.month,
             day: day
         )) ?? calendar.startOfDay(for: date)
+        return previousBusinessDay(onOrBefore: nominal, holidays: holidays, calendar: calendar)
+    }
+
+    private static func previousBusinessDay(
+        onOrBefore date: Date,
+        holidays: Set<String>,
+        calendar: Calendar
+    ) -> Date {
+        var candidate = calendar.startOfDay(for: date)
+        while calendar.isDateInWeekend(candidate) || holidays.contains(dayKey(for: candidate, calendar: calendar)) {
+            candidate = calendar.date(byAdding: .day, value: -1, to: candidate) ?? candidate
+        }
+        return candidate
+    }
+
+    private static func nextBusinessDay(
+        onOrAfter date: Date,
+        holidays: Set<String>,
+        calendar: Calendar
+    ) -> Date {
+        var candidate = date
+        while calendar.isDateInWeekend(candidate) || holidays.contains(dayKey(for: candidate, calendar: calendar)) {
+            candidate = calendar.date(byAdding: .day, value: 1, to: candidate) ?? candidate
+        }
+        return candidate
+    }
+
+    private static func scheduledDate(
+        day: Int,
+        hour: Int,
+        minute: Int,
+        cycleStarting cycleStart: Date,
+        calendar: Calendar
+    ) -> Date {
+        let start = calendar.startOfDay(for: cycleStart)
+        let sameMonth = date(
+            day: day,
+            hour: hour,
+            minute: minute,
+            monthContaining: start,
+            calendar: calendar
+        )
+        if sameMonth >= start { return sameMonth }
+        let nextMonth = offset(1, from: firstDayOfMonth(containing: start, calendar: calendar), calendar: calendar)
+        return date(day: day, hour: hour, minute: minute, monthContaining: nextMonth, calendar: calendar)
+    }
+
+    private static func date(
+        day: Int,
+        hour: Int,
+        minute: Int,
+        monthContaining date: Date,
+        calendar: Calendar
+    ) -> Date {
+        let monthRange = calendar.range(of: .day, in: .month, for: date)
+        let validDay = min(max(day, 1), monthRange?.count ?? day)
+        let month = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: month.year,
+            month: month.month,
+            day: validDay,
+            hour: hour,
+            minute: minute
+        )) ?? date
     }
 
     private static func firstDayOfMonth(containing date: Date, calendar: Calendar) -> Date {
@@ -234,8 +418,15 @@ enum CycleDate {
 }
 
 extension ChecklistData {
+    var holidayDateSet: Set<String> { Set(holidayDates) }
+
     func cycleKey(for date: Date, calendar: Calendar = .current) -> String {
-        CycleDate.key(for: date, payday: payday, calendar: calendar)
+        CycleDate.key(
+            for: date,
+            payday: payday,
+            holidays: holidayDateSet,
+            calendar: calendar
+        )
     }
 
     func isStepComplete(_ itemID: UUID, cycleKey: String, step: CompletionStep) -> Bool {

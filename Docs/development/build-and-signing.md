@@ -139,7 +139,10 @@ widget bundle ID는 containing app bundle ID의 prefix를 사용하는 것이 �
 
 ```text
 NSSupportsLiveActivities = YES
+NSCalendarsFullAccessUsageDescription = 월급일과 자동이체일을 공휴일 기준으로 조정하기 위해 공휴일 캘린더를 읽습니다.
 ```
+
+앱은 EventKit의 full calendar access를 공휴일 동기화 버튼을 누른 경우에만 요청한다. 이 usage description이 없으면 권한 요청 시 앱이 종료되므로 Debug와 Release build configuration에 모두 유지해야 한다. Widget extension은 캘린더에 직접 접근하지 않아 해당 key가 필요 없다.
 
 Widget extension의 `Info.plist`에는 최소 다음 값이 들어간다.
 

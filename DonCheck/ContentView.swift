@@ -152,6 +152,11 @@ private struct SavingsItemRow: View {
                         Text("매월 \(item.debitDay)일 · \(String(format: "%02d:%02d", item.reminderHour, item.reminderMinute))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if item.requiresAutomaticTransferConfirmation {
+                            Text("자동이체 매월 \(item.automaticTransferDay)일")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
                     Text(item.amount, format: .currency(code: "KRW").precision(.fractionLength(0)))

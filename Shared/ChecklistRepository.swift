@@ -3,8 +3,8 @@ import Foundation
 final class ChecklistRepository {
     static let shared = ChecklistRepository()
 
-    private let dataKey = "checklist-data-v3"
-    private let legacyDataKeys = ["checklist-data-v2", "checklist-data-v1"]
+    private let dataKey = "checklist-data-v4"
+    private let legacyDataKeys = ["checklist-data-v3", "checklist-data-v2", "checklist-data-v1"]
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -34,11 +34,30 @@ final class ChecklistRepository {
                     }
                     return CompletionRecord(
                         itemID: record.itemID,
-                        cycleKey: CycleDate.key(for: month, payday: migrated.payday),
+                        cycleKey: CycleDate.key(
+                            for: month,
+                            payday: migrated.payday,
+                            holidays: migrated.holidayDateSet
+                        ),
                         step: record.step,
                         completedAt: record.completedAt
                     )
                 }
+            }
+            migrated.completions = migrated.completions.map { record in
+                guard let legacyCycleDate = CycleDate.date(for: record.cycleKey) else {
+                    return record
+                }
+                return CompletionRecord(
+                    itemID: record.itemID,
+                    cycleKey: CycleDate.key(
+                        for: legacyCycleDate,
+                        payday: migrated.payday,
+                        holidays: migrated.holidayDateSet
+                    ),
+                    step: record.step,
+                    completedAt: record.completedAt
+                )
             }
             save(migrated)
             return migrated

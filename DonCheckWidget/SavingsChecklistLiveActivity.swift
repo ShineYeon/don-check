@@ -11,12 +11,14 @@ struct SavingsChecklistLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("저축", systemImage: "checkmark.circle")
-                        .font(.headline)
+                    HStack(spacing: 6) {
+                        DonCheckMark(size: 22)
+                        Text("DonCheck")
+                            .font(.headline)
+                    }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("\(context.state.remainingCount)개 남음")
-                        .font(.caption.weight(.semibold))
+                    ExpandedStageSummary(state: context.state)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 7) {
@@ -26,18 +28,13 @@ struct SavingsChecklistLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: "checkmark.circle")
-                    .foregroundStyle(.mint)
+                DonCheckMark(size: 20)
+                    .accessibilityLabel("돈 체크")
             } compactTrailing: {
-                Text("\(context.state.remainingCount)")
-                    .font(.caption.bold().monospacedDigit())
+                CompactStageSummary(state: context.state)
             } minimal: {
-                ZStack {
-                    Circle().fill(.mint)
-                    Text("\(context.state.remainingCount)")
-                        .font(.caption2.bold().monospacedDigit())
-                        .foregroundStyle(.black)
-                }
+                DonCheckMark(size: 20)
+                    .accessibilityLabel("돈 체크, \(context.state.stageSummaryText)")
             }
             .keylineTint(.mint)
         }
@@ -59,8 +56,12 @@ private struct LockScreenChecklistView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(state.remainingCount)개 남음")
-                        .font(.subheadline.weight(.semibold))
+                    Text("입금 \(state.depositCompletedCount)/\(state.totalCount)")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                    if state.automaticTransferItemCount > 0 {
+                        Text("저축 \(state.automaticTransferCompletedCount)/\(state.automaticTransferItemCount)")
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                    }
                     Text(state.remainingAmount, format: .currency(code: "KRW").precision(.fractionLength(0)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -78,6 +79,97 @@ private struct LockScreenChecklistView: View {
             }
         }
         .padding(16)
+    }
+}
+
+private struct DonCheckMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "wonsign.circle.fill")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(.mint)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(.white, .black)
+                .offset(x: size * 0.08, y: size * 0.08)
+        }
+        .frame(width: size * 1.08, height: size * 1.08)
+    }
+}
+
+private struct CompactStageSummary: View {
+    let state: SavingsChecklistAttributes.ContentState
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 3) {
+                CompactMetric(symbol: "list.bullet", value: state.totalCount, color: .primary)
+                CompactMetric(
+                    symbol: "tray.and.arrow.down.fill",
+                    value: state.depositCompletedCount,
+                    color: .mint
+                )
+                if state.automaticTransferItemCount > 0 {
+                    CompactMetric(
+                        symbol: "banknote.fill",
+                        value: state.automaticTransferCompletedCount,
+                        color: .orange
+                    )
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            Text(compactFallback)
+                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(state.stageSummaryText)
+    }
+
+    private var compactFallback: String {
+        if state.automaticTransferItemCount > 0 {
+            return "\(state.totalCount)·\(state.depositCompletedCount)·\(state.automaticTransferCompletedCount)"
+        }
+        return "\(state.totalCount)·\(state.depositCompletedCount)"
+    }
+}
+
+private struct CompactMetric: View {
+    let symbol: String
+    let value: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 1) {
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .bold))
+            Text("\(value)")
+                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+        }
+        .foregroundStyle(color)
+    }
+}
+
+private struct ExpandedStageSummary: View {
+    let state: SavingsChecklistAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("전체 \(state.totalCount)개")
+                .font(.caption.weight(.semibold).monospacedDigit())
+            Text("입금 \(state.depositCompletedCount)개")
+                .foregroundStyle(.mint)
+            if state.automaticTransferItemCount > 0 {
+                Text("저축 \(state.automaticTransferCompletedCount)개")
+                    .foregroundStyle(.orange)
+            }
+        }
+        .font(.caption2.weight(.semibold).monospacedDigit())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(state.stageSummaryText)
     }
 }
 

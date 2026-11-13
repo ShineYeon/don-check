@@ -42,6 +42,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
 | `leadDays` | 출금 전 사전 알림 일수 | 0...14 |
 | `followUpCount` | 출금 후 일별 재알림 수 | 0...7 |
 | `requiresAutomaticTransferConfirmation` | 저축 완료 2단계 확인 여부 | Toggle |
+| `automaticTransferDay` | 자동이체 확인 항목의 실제 매월 이체일 | 1...31 |
 | `createdAt` | 생성 시각 | 자동 설정 |
 
 `amount`는 통화 소수점을 사용하지 않는다. 다른 통화를 지원하려면 통화 코드와 minor unit 정책을 모델에 추가해야 한다.
@@ -63,7 +64,7 @@ struct CompletionRecord: Codable, Hashable {
 
 ## 3. 월급일과 주기 키
 
-`ChecklistData.payday`는 1~31 범위의 월급일이다. 기존 데이터와 새 설치의 기본값은 1일이다. `CycleDate.key(for:payday:)`는 입력 날짜에서 가장 가까운 과거 월급일을 찾아 `yyyy-MM-dd` 문자열을 만든다.
+`ChecklistData.payday`는 1~31 범위의 명목 월급일이다. 기존 데이터와 새 설치의 기본값은 1일이다. `CycleDate.key(for:payday:holidays:)`는 말일과 영업일 보정을 적용한 뒤 입력 날짜에서 가장 가까운 과거 실제 월급일을 찾아 `yyyy-MM-dd` 문자열을 만든다.
 
 ```text
 월급일 25일, 2026년 11월 24일 → 2026-10-25
@@ -71,7 +72,9 @@ struct CompletionRecord: Codable, Hashable {
 월급일 25일, 2027년  1월  1일 → 2026-12-25
 ```
 
-월급일 당일 00:00부터 새 주기를 사용한다. 29~31일이 없는 달에는 말일을 월급일로 보정한다. 예를 들어 월급일 31일이면 2027년 2월 주기는 2월 28일부터 시작한다.
+실제 월급일 당일 00:00부터 새 주기를 사용한다. 29~31일이 없는 달에는 먼저 말일로 보정한 다음, 토·일요일 또는 `holidayDates`에 포함된 날짜인 동안 하루씩 뒤로 이동한다. 즉 금요일도 공휴일이면 목요일까지 이동한다. 다음 달의 보정된 월급일이 현재 달에 속할 수도 있으므로 `CycleDate.start`는 인접 세 달의 경계 후보 중 현재 이전의 가장 최근 날짜를 선택한다.
+
+`holidayDates`는 설정 화면에서 iPhone 구독 공휴일 캘린더를 동기화한 로컬 캐시다. 앱, 위젯, 알림과 Live Activity가 동일한 App Group snapshot을 읽어 같은 영업일을 계산한다. 캘린더 권한이 없거나 대상 캘린더가 없으면 집합이 비어 있으므로 주말만 건너뛴다.
 
 완료 판정:
 
@@ -93,6 +96,8 @@ data.isComplete(item.id, cycleKey: "2026-11-25")
 | 31일 | 4월 | 30일 |
 
 시간대는 `Calendar.current.timeZone`을 사용한다. 사용자가 기기 시간대를 바꾸면 다음 재계산부터 새 시간대가 적용된다.
+
+자동이체 확인 항목은 `CycleDate.automaticTransferDate(for:cycleStarting:holidays:)`로 현재 월급 주기 안의 이체일을 계산한다. 29~31일이 없는 달에는 먼저 말일로 보정한 다음, 토·일요일 또는 동기화한 공휴일인 동안 하루씩 앞으로 이동한다. 월급일과 달리 자동이체는 다음 영업일 규칙이므로 일요일 뒤 월요일까지 공휴일이면 화요일이 실제 이체일이다. 알림 시각의 hour/minute는 날짜를 이동해도 유지한다.
 
 ## 5. CRUD 흐름
 
@@ -155,6 +160,8 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 - 12월 → 다음 해 1월 cycle 전환
 - 월급일 전날 23:59 → 월급일 00:00 전환
 - 월급일 29~31일의 평년/윤년 2월 말일 보정
+- 주말과 연속 공휴일을 건너뛴 이전 영업일 월급 경계
+- 주말과 연속 공휴일을 건너뛴 다음 영업일 자동이체일
 - 월급일 변경으로 현재 cycle이 달라지는 경우
 - 출금일 당일 알림 시각 이전/이후
 - 월말 사전 알림이 이전 달로 넘어가는 경우

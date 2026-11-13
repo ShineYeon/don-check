@@ -8,7 +8,8 @@
 |---:|---|---|---|
 | 1 | NEXT-001 | 월급일 기준 체크 주기 | 구현 완료 |
 | 2 | NEXT-002 | 항목별 2단계 완료 체크 | 구현 완료 |
-| 3 | NEXT-003 | Dynamic Island 단계별 요약 디자인 | 설계 예정 |
+| 3 | NEXT-003 | Dynamic Island 단계별 요약 디자인 | 구현 완료 |
+| 4 | NEXT-004 | 일정 기반 Live Activity attention window | 구현 완료 |
 
 NEXT-002의 완료 상태는 NEXT-001에서 정의한 월급 주기에 귀속된다. NEXT-003은 NEXT-002에서 추가한 단계별 집계값을 Dynamic Island compact UI에 노출한다.
 
@@ -48,7 +49,7 @@ NEXT-002의 완료 상태는 NEXT-001에서 정의한 월급 주기에 귀속된
 - 월급일이 되어도 기존 completion을 일괄 삭제하지 않는다. 새 주기 키로 조회 결과가 자연스럽게 비어 있도록 한다.
 - 날짜 경계는 사용자의 현재 Calendar와 time zone을 따른다. 월급일 당일 00:00부터 새 주기로 간주하는 것을 기본안으로 한다.
 - 앱이 종료된 상태에서도 다음 실행, widget timeline 갱신, notification action 처리 시 현재 주기를 다시 계산한다. 정확히 00:00에 백그라운드 코드를 실행하는 방식에 의존하지 않는다.
-- NEXT-001에서 App Group 저장 키를 v2로 올렸고, 현재 v3 migration도 v1/v2의 월급일과 완료 기록을 보존한다.
+- NEXT-001에서 App Group 저장 키를 v2로 올렸고, 현재 v4 migration도 v1~v3의 월급일과 완료 기록을 보존한다.
 
 ### 월급일 변경 규칙
 
@@ -146,7 +147,7 @@ completion의 논리적 고유 키는 `(itemID, cycleKey, step)`이 된다. 최�
 
 ### 기존 데이터 migration
 
-App Group 저장 키를 `checklist-data-v3`로 올렸다. 기존 항목은 모두 `requiresAutomaticTransferConfirmation = false`로 migration하고 기존 completion은 `step = .deposit`으로 해석한다. 이 방식이면 업데이트 직후 기존 사용자의 완료 상태가 바뀌지 않는다.
+NEXT-002에서 App Group 저장 키를 v3로 올렸다. 현재 v4 migration에서도 기존 항목은 `requiresAutomaticTransferConfirmation = false`, 기존 completion은 `step = .deposit`으로 해석한다.
 
 자동이체 확인을 켠 기존 항목은 현재 주기의 입금 완료 상태는 유지하되 저축 완료 상태가 새로 미완료가 된다.
 
@@ -183,18 +184,30 @@ Dynamic Island가 compact 상태일 때 앱 정체성과 현재 저축 진행 �
 - `M`: `deposit` 단계가 완료된 항목 수
 - `O`: 자동이체 확인이 필요한 항목 중 `automaticTransfer` 단계가 완료된 항목 수
 
-compact 영역은 폭이 매우 좁으므로 실제 표시는 `N · 입금 M · 저축 O`, 단계별 아이콘과 숫자 조합 또는 상황에 따른 순환/축약 표기를 검토한다. 전체 문장은 expanded 영역과 접근성 label에서 제공한다.
+compact 영역은 폭이 매우 좁으므로 `ViewThatFits`를 사용한다. 공간이 충분하면 전체·입금·저축을 각각 SF Symbol과 숫자로 표시하고, 부족하면 `N·M·O` 순서의 숫자열로 자동 축약한다. 전체 문장은 expanded 영역과 접근성 label에서 제공한다.
 
 ### 아이콘 방향
 
-우선안은 외부 이미지 asset 없이 SF Symbols를 조합한 앱 전용 mark다.
+외부 이미지 asset 없이 SF Symbols를 조합한 앱 전용 mark를 구현했다.
 
-- 기본 symbol 후보: `wonsign.circle.fill`, `checkmark.circle.fill`, `banknote.fill`
-- 권장 조합: mint 색상의 `wonsign.circle.fill`에 작은 check 의미를 부여
-- 대안: 폭이 허용되면 `Don` 또는 `D` monogram
-- emoji는 OS별 렌더링과 정렬 차이가 있어 fallback으로만 사용
+- mint 색상의 `wonsign.circle.fill` 위에 작은 `checkmark.circle.fill`을 겹친다.
+- expanded leading에서는 mark 옆에 `DonCheck` 이름을 함께 표시한다.
+- compact/minimal에서는 mark만 표시한다.
+- emoji는 OS별 렌더링과 정렬 차이가 있어 사용하지 않는다.
 
 실제 custom bitmap 또는 vector asset을 만들 경우 Dynamic Island의 작은 크기, monochrome/tinted rendering과 asset licensing을 함께 검증한다.
+
+### 구현 결과
+
+- `DonCheckMark`: compactLeading, minimal, expanded leading에서 재사용
+- `CompactStageSummary`: symbol+숫자와 `N·M·O` fallback 제공
+- `ExpandedStageSummary`: 전체/입금/저축 값을 명시적인 한국어 label로 표시
+- 자동이체 확인 대상이 없으면 저축 metric을 숨김
+- 잠금 화면 우측 요약도 입금/저축 단계별 분수로 통일
+- 모든 presentation이 `ContentState`의 동일 computed aggregate를 사용
+- compact, expanded, minimal에 축약되지 않은 VoiceOver label 제공
+
+코드 빌드와 App Intents metadata 검증은 완료했다. Dynamic Island의 실제 폭과 카메라 주변 alignment는 지원 iPhone에서 최종 확인해야 한다.
 
 ### 기능 요구사항
 
@@ -216,6 +229,39 @@ compact 영역은 폭이 매우 좁으므로 실제 표시는 `N · 입금 M · 
 - 9개 이하, 10개 이상 항목에서 truncation과 alignment를 실제 Dynamic Island 지원 기기로 확인한다.
 - expanded 영역과 잠금 화면의 집계가 앱 메인 화면 값과 일치한다.
 - VoiceOver가 전체 항목, 입금 완료, 저축 완료를 자연스러운 순서로 읽는다.
+
+## NEXT-004: 일정 기반 Live Activity attention window
+
+### 구현 내용
+
+- 자동이체 확인 항목에 `automaticTransferDay` 1~31 설정 추가
+- 자동이체일이 없는 기존 v3 항목은 기존 `debitDay` 값으로 migration
+- 명목 월급일이 주말 또는 동기화한 공휴일이면 연속 휴일을 건너뛴 직전 영업일을 실제 주기 시작일로 사용
+- 명목 자동이체일이 주말 또는 동기화한 공휴일이면 연속 휴일을 건너뛴 다음 영업일을 실제 이체일로 사용
+- 설정에서 iPhone 구독 공휴일 캘린더를 명시적으로 동기화하고 전년도부터 향후 2년까지의 종일 날짜를 App Group에 캐시
+- 실제 월급일 하루 전 00:00부터 입금 미완료 cycle의 Live Activity 시작
+- 영업일 보정된 항목별 실제 자동이체일 하루 전 00:00부터 저축 미완료 cycle의 Live Activity 시작
+- 입금 또는 저축 단계를 체크하면 해당 attention window가 제거되고 active/pending activity를 재구성
+- 월급일 하루 전에는 다음 cycle key를 사용하므로 미리 체크한 입금 상태가 월급일 이후에도 유지
+- 공휴일 캐시 변경 시 completion cycle key를 새 실제 월급일 키로 매핑하여 체크 상태 유지
+- v1~v3 completion cycle key를 영업일 보정된 실제 월급일 키로 migration
+
+### 플랫폼 동작
+
+- iOS 26 이상: 미래 attention window를 로컬 scheduled Live Activity로 예약하고 릴레이를 구성
+- iOS 17~25: 미래 로컬 예약 API가 없으므로 attention window 중 앱이 실행되어 refresh될 때 즉시 시작
+- 릴레이는 시스템의 동시 activity 한도 안에서 약 40시간 범위를 선예약하며 무기한 표시는 보장하지 않음
+
+### 수용 조건
+
+- 주말·공휴일 월급일의 cycle이 연속 휴일 전 마지막 영업일 00:00에 시작한다.
+- 주말·공휴일 자동이체일은 연속 휴일 후 첫 영업일로 이동한다.
+- 입금 Live Activity는 실제 월급일 하루 전 00:00부터 입금 완료까지 표시 대상이다.
+- 자동이체 Live Activity는 설정일 하루 전 00:00부터 저축 완료까지 표시 대상이다.
+- 서로 다른 자동이체일을 가진 항목들이 각각 올바른 attention window를 생성한다.
+- 월말 29~31일 자동이체일은 짧은 달의 마지막 날로 보정된다.
+- 공휴일 캘린더 미허용·미발견 상태에서는 안내 문구를 표시하고 주말 보정은 계속 동작한다.
+- 기존 v3 데이터의 자동이체일과 완료 상태가 migration 후 유지된다.
 
 ## 구현 시 함께 갱신할 문서
 

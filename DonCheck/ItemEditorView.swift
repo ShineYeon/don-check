@@ -24,8 +24,15 @@ struct ItemEditorView: View {
 
                 Section("완료 단계") {
                     Toggle("자동이체 후 저축 완료 확인", isOn: $draft.requiresAutomaticTransferConfirmation)
+                    if draft.requiresAutomaticTransferConfirmation {
+                        Stepper(
+                            "자동이체일: 매월 \(draft.automaticTransferDay)일",
+                            value: $draft.automaticTransferDay,
+                            in: 1...31
+                        )
+                    }
                     Text(draft.requiresAutomaticTransferConfirmation
-                         ? "입금 완료와 저축 완료를 각각 체크합니다."
+                         ? "주말·공휴일을 보정한 실제 자동이체일 하루 전부터 저축 완료 확인이 잠금화면과 Dynamic Island에 표시됩니다."
                          : "입금 완료만 체크하면 이 항목이 완료됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)

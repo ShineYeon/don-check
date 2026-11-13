@@ -21,7 +21,11 @@ struct ChecklistProvider: TimelineProvider {
         let now = Date.now
         let data = ChecklistRepository.shared.load()
         let entry = ChecklistEntry(date: now, data: data, cycleKey: data.cycleKey(for: now))
-        let nextPayday = CycleDate.nextBoundary(after: now, payday: data.payday)
+        let nextPayday = CycleDate.nextBoundary(
+            after: now,
+            payday: data.payday,
+            holidays: data.holidayDateSet
+        )
         completion(Timeline(entries: [entry], policy: .after(nextPayday)))
     }
 

@@ -90,11 +90,21 @@ git diff --check
 | 월급일 25일, 25일 00:00 | 현재 달 25일 시작 cycle |
 | 월급일 31일, 평년 2월 28일 | 2월 28일 시작 cycle |
 | 월급일 31일, 윤년 2월 29일 | 2월 29일 시작 cycle |
+| 월급일이 토요일 | 직전 금요일 00:00 시작 cycle |
+| 월급일이 일요일 | 직전 금요일 00:00 시작 cycle |
+| 월급일 직전 금요일도 공휴일 | 연속 휴일 전 목요일 00:00 시작 cycle |
+| 다음 달 월급일 보정일이 현재 달 | 보정된 이전 영업일부터 다음 cycle |
 | 월급일 변경 | 현재 cycle 재계산 및 system UI 동기화 |
+| 자동이체일 31일, 짧은 달 | 해당 달 말일 이체일 |
+| 자동이체일이 일요일, 다음 월요일도 공휴일 | 화요일의 기존 알림 시각으로 이체일 이동 |
+| 공휴일 캐시가 없는 기존 v4 payload | decode 성공 및 주말만 보정 |
+| 공휴일 재동기화로 cycle 경계 변경 | completion이 새 cycle key로 매핑되어 체크 유지 |
 | 월말 사전 알림 | 이전 달 날짜로 예약 |
 | 다른 시간대로 이동 | 다음 재예약에서 현지 calendar 적용 |
 
 자동화 시 `Calendar`와 `now`를 주입하고 고정 timezone을 사용해야 재현 가능한 테스트가 된다.
+
+EventKit 통합은 실제 기기에서 대한민국 공휴일 캘린더 활성화, 최초 권한 허용, 권한 거부, 캘린더 미발견을 각각 확인한다. 단위 테스트에서는 EventKit에 의존하지 않고 고정된 `Set<String>`을 `holidays` 인자로 주입한다.
 
 ## 6. 알림
 
@@ -138,12 +148,21 @@ let requests = await UNUserNotificationCenter.current().pendingNotificationReque
 - 미완료 항목이 없을 때 사용자 오류
 - Live Activity 비활성화 상태 오류
 - 이미 active일 때 중복 생성 없이 update
+- 실제 월급일 하루 전 입금 window 시작
+- 영업일 보정된 실제 자동이체일 하루 전 저축 window 시작
+- 입금/저축 완료 후 해당 window 종료 또는 다음 window 전환
+- 월급일 전날 next cycle key로 입금 체크 유지
 
 ### UI
 
 - 잠금 화면 최대 4개 row
 - 4개 초과 요약
 - Dynamic Island compact/minimal/expanded
+- compactLeading DonCheck 원화+체크 mark
+- compactTrailing 전체/입금/저축 symbol과 숫자
+- compact 폭 부족 시 `N·M·O` fallback
+- 자동이체 확인 항목 0개일 때 저축 metric 숨김
+- 두 자릿수 집계와 VoiceOver 전체 문구
 - 금액과 미완료 개수
 - row 체크 interaction
 - row의 입금/저축 단계별 intent

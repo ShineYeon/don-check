@@ -81,6 +81,7 @@ struct SavingsChecklistAttributes: ActivityAttributes {
         var cycleKey: String
         var items: [LiveChecklistItem]
 
+        var totalCount: Int { items.count }
         var remainingCount: Int { items.filter { !$0.isComplete }.count }
         var completedCount: Int { items.filter(\.isComplete).count }
         var depositCompletedCount: Int { items.filter(\.isDepositComplete).count }
@@ -94,6 +95,14 @@ struct SavingsChecklistAttributes: ActivityAttributes {
         }
         var remainingAmount: Int {
             items.filter { !$0.isDepositComplete }.reduce(0) { $0 + $1.amount }
+        }
+
+        var stageSummaryText: String {
+            var summary = "전체 \(totalCount)개 중 \(depositCompletedCount)개 입금 완료"
+            if automaticTransferItemCount > 0 {
+                summary += ", \(automaticTransferCompletedCount)개 저축 완료"
+            }
+            return summary
         }
     }
 
@@ -145,20 +154,25 @@ enum LiveActivityManager {
     }
 
     static func refresh(_ data: ChecklistData, now: Date = .now) async {
-        let currentKey = data.cycleKey(for: now)
-        let state = contentState(data: data, cycleKey: currentKey, subtitle: "완료할 항목을 체크하세요")
+        let activeWindow = attentionWindow(data: data, at: now)
 
         var hasActiveActivity = false
         for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .active {
-            hasActiveActivity = true
-            if state.remainingCount == 0 {
+            guard let activeWindow else {
                 await activity.end(nil, dismissalPolicy: .immediate)
-            } else {
-                await activity.update(ActivityContent(state: state, staleDate: staleDate(from: now)))
+                continue
             }
+            hasActiveActivity = true
+            let state = contentState(
+                data: data,
+                cycleKey: activeWindow.cycleKey,
+                subtitle: activeWindow.subtitle
+            )
+            await activity.update(ActivityContent(state: state, staleDate: staleDate(from: now)))
         }
 
-        guard state.remainingCount > 0 else {
+        let windows = attentionWindows(data: data, now: now)
+        guard !windows.isEmpty else {
             if #available(iOS 26.0, *) {
                 for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
                     await activity.end(nil, dismissalPolicy: .immediate)
@@ -167,21 +181,36 @@ enum LiveActivityManager {
             return
         }
 
-        guard #available(iOS 26.0, *), ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-
-        // Replace pending schedules so edits and completed items are reflected before they appear.
-        for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
-            await activity.end(nil, dismissalPolicy: .immediate)
-        }
-
-        if !hasActiveActivity && shouldStartImmediately(data: data, now: now) {
+        if !hasActiveActivity, let activeWindow {
             do {
-                try await startNow(data, subtitle: "고정 유지 모드 · 완료할 때까지 표시해요")
+                if #available(iOS 26.0, *) {
+                    for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    }
+                }
+                let state = contentState(
+                    data: data,
+                    cycleKey: activeWindow.cycleKey,
+                    subtitle: activeWindow.subtitle
+                )
+                let attributes = SavingsChecklistAttributes(
+                    eventKey: dayKey(for: now),
+                    scheduledStart: now
+                )
+                let content = ActivityContent(state: state, staleDate: staleDate(from: now))
+                _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
                 hasActiveActivity = true
             } catch {
                 // The explicit start button reports errors to the UI. Automatic
                 // refresh keeps local notifications working if ActivityKit declines.
             }
+        }
+
+        guard #available(iOS 26.0, *), ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        // Replace pending schedules so edits and completed items are reflected before they appear.
+        for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
 
         let events = relayEvents(data: data, now: now)
@@ -195,7 +224,9 @@ enum LiveActivityManager {
             let content = ActivityContent(state: eventState, staleDate: staleDate(from: event.start))
             let alert = AlertConfiguration(
                 title: "저축 체크리스트",
-                body: "완료하지 않은 입금 항목을 확인하세요.",
+                body: event.subtitle.hasPrefix("자동이체")
+                    ? "자동이체가 완료됐는지 확인하세요."
+                    : "완료하지 않은 입금 항목을 확인하세요.",
                 sound: .default
             )
             _ = try? Activity.request(
@@ -216,49 +247,73 @@ enum LiveActivityManager {
         let subtitle: String
     }
 
-    private static func shouldStartImmediately(data: ChecklistData, now: Date) -> Bool {
-        let calendar = Calendar.current
-        let cycleKey = data.cycleKey(for: now, calendar: calendar)
-        let cycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
-        return data.items.contains { item in
-            guard !data.isComplete(item.id, cycleKey: cycleKey) else { return false }
-            let due = CycleDate.dueDate(
-                for: item,
-                cycleStarting: cycleStart,
-                calendar: calendar
-            )
-            let attention = calendar.date(byAdding: .day, value: -item.leadDays, to: due) ?? due
-            return attention <= now
-        }
+    private struct AttentionWindow {
+        let cycleKey: String
+        let start: Date
+        let subtitle: String
     }
 
-    private static func relayEvents(data: ChecklistData, now: Date, anchor overrideAnchor: Date? = nil) -> [ScheduledEvent] {
-        let calendar = Calendar.current
-        var attentionDates: [Date] = []
+    private static func attentionWindow(data: ChecklistData, at date: Date) -> AttentionWindow? {
+        attentionWindows(data: data, now: date)
+            .filter { $0.start <= date }
+            .max { $0.start < $1.start }
+    }
 
-        let currentCycleStart = CycleDate.start(for: now, payday: data.payday, calendar: calendar)
-        let cycleStarts = [
-            currentCycleStart,
-            CycleDate.nextBoundary(after: now, payday: data.payday, calendar: calendar)
-        ]
-        for cycleStart in cycleStarts {
+    private static func attentionWindows(data: ChecklistData, now: Date) -> [AttentionWindow] {
+        let calendar = Calendar.current
+        let currentCycleStart = CycleDate.start(
+            for: now,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
+        let nextCycleStart = CycleDate.nextBoundary(
+            after: now,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
+        var windows: [AttentionWindow] = []
+
+        for cycleStart in [currentCycleStart, nextCycleStart] {
             let cycleKey = data.cycleKey(for: cycleStart, calendar: calendar)
-            for item in data.items {
-                guard !data.isComplete(item.id, cycleKey: cycleKey) else { continue }
-                let due = CycleDate.dueDate(
+            let hasIncompleteDeposit = data.items.contains {
+                !data.isStepComplete($0.id, cycleKey: cycleKey, step: .deposit)
+            }
+            if hasIncompleteDeposit {
+                let start = calendar.date(byAdding: .day, value: -1, to: cycleStart) ?? cycleStart
+                windows.append(AttentionWindow(
+                    cycleKey: cycleKey,
+                    start: calendar.startOfDay(for: start),
+                    subtitle: "입금 준비 · 완료할 때까지 표시해요"
+                ))
+            }
+
+            for item in data.items where item.requiresAutomaticTransferConfirmation {
+                guard !data.isStepComplete(
+                    item.id,
+                    cycleKey: cycleKey,
+                    step: .automaticTransfer
+                ) else { continue }
+                let transferDate = CycleDate.automaticTransferDate(
                     for: item,
                     cycleStarting: cycleStart,
+                    holidays: data.holidayDateSet,
                     calendar: calendar
                 )
-                var dates: [Date] = [due]
-                if item.leadDays > 0,
-                   let early = calendar.date(byAdding: .day, value: -item.leadDays, to: due) {
-                    dates.append(early)
-                }
-                attentionDates.append(contentsOf: dates)
+                let previousDay = calendar.date(byAdding: .day, value: -1, to: transferDate) ?? transferDate
+                windows.append(AttentionWindow(
+                    cycleKey: cycleKey,
+                    start: calendar.startOfDay(for: previousDay),
+                    subtitle: "자동이체 확인 · 저축 완료까지 표시해요"
+                ))
             }
         }
+        return windows
+    }
 
+    private static func relayEvents(data: ChecklistData, now: Date) -> [ScheduledEvent] {
+        let windows = attentionWindows(data: data, now: now)
         let active = Activity<SavingsChecklistAttributes>.activities
             .filter { $0.activityState == .active }
             .max {
@@ -266,12 +321,10 @@ enum LiveActivityManager {
                 ($1.attributes.scheduledStart ?? .distantPast)
             }
 
-        let earliestAttention = attentionDates.min() ?? now
+        let earliestAttention = windows.map(\.start).min() ?? now
         let base: Date
-        if let overrideAnchor {
-            base = overrideAnchor
-        } else if let active {
-            base = active.attributes.scheduledStart ?? now
+        if let active {
+            base = max(active.attributes.scheduledStart ?? now, now)
         } else if earliestAttention <= now {
             base = now
         } else {
@@ -281,16 +334,21 @@ enum LiveActivityManager {
         // Start the successor just before the eight-hour system limit. Five pending
         // activities provide roughly forty hours of continuous visible coverage.
         let relayInterval: TimeInterval = 7 * 60 * 60 + 55 * 60
-        let shouldScheduleAnchor = active == nil && overrideAnchor == nil && base > now.addingTimeInterval(30)
+        let shouldScheduleAnchor = active == nil && base > now.addingTimeInterval(30)
         let indices = shouldScheduleAnchor ? Array(0...4) : Array(1...5)
         return indices.compactMap { index in
             let start = base.addingTimeInterval(relayInterval * Double(index))
             guard start > now.addingTimeInterval(30) else { return nil }
+            let eventWindow = windows
+                .filter { $0.start <= start }
+                .max { $0.start < $1.start }
+                ?? windows.min { $0.start < $1.start }
+            guard let eventWindow else { return nil }
             return ScheduledEvent(
                 key: "relay-\(Int(start.timeIntervalSince1970))",
-                cycleKey: data.cycleKey(for: start, calendar: calendar),
+                cycleKey: eventWindow.cycleKey,
                 start: start,
-                subtitle: "고정 유지 모드 · 완료할 때까지 표시해요"
+                subtitle: eventWindow.subtitle
             )
         }
     }

@@ -1,3 +1,4 @@
+import EventKit
 import Foundation
 import SwiftUI
 import UserNotifications
@@ -8,6 +9,7 @@ final class ChecklistStore: ObservableObject {
     @Published private(set) var data = ChecklistData()
     @Published var notificationAuthorized = false
     @Published var liveActivityMessage: String?
+    @Published private(set) var holidaySyncMessage: String?
 
     private let repository: ChecklistRepository
 
@@ -59,6 +61,73 @@ final class ChecklistStore: ObservableObject {
         guard data.payday != validDay else { return }
         data.payday = validDay
         persist(removeDeliveredNotifications: true)
+    }
+
+    func syncHolidayCalendar() async {
+        let eventStore = EKEventStore()
+        do {
+            let granted: Bool
+            if EKEventStore.authorizationStatus(for: .event) == .fullAccess {
+                granted = true
+            } else {
+                granted = try await eventStore.requestFullAccessToEvents()
+            }
+            guard granted else {
+                holidaySyncMessage = "캘린더 접근이 허용되지 않아 공휴일을 동기화하지 못했습니다."
+                return
+            }
+
+            let keywords = ["공휴일", "holiday", "holidays"]
+            let holidayCalendars = eventStore.calendars(for: .event).filter { calendar in
+                let title = calendar.title.lowercased()
+                return keywords.contains { title.contains($0) }
+            }
+            guard !holidayCalendars.isEmpty else {
+                holidaySyncMessage = "구독 중인 공휴일 캘린더를 찾지 못했습니다. iPhone 캘린더에서 대한민국 공휴일을 활성화해 주세요."
+                return
+            }
+
+            let calendar = Calendar.current
+            let currentYear = calendar.component(.year, from: .now)
+            let start = calendar.date(from: DateComponents(year: currentYear - 1, month: 1, day: 1)) ?? .now
+            let end = calendar.date(from: DateComponents(year: currentYear + 3, month: 1, day: 1)) ?? .now
+            let predicate = eventStore.predicateForEvents(
+                withStart: start,
+                end: end,
+                calendars: holidayCalendars
+            )
+            let events = eventStore.events(matching: predicate).filter(\.isAllDay)
+            var holidayKeys = Set<String>()
+            for event in events {
+                var date = calendar.startOfDay(for: event.startDate)
+                let eventEnd = calendar.startOfDay(for: event.endDate)
+                while date < eventEnd {
+                    holidayKeys.insert(CycleDate.dayKey(for: date, calendar: calendar))
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+                    date = next
+                }
+            }
+
+            let previousHolidayKeys = data.holidayDateSet
+            data.completions = data.completions.map { record in
+                return CompletionRecord(
+                    itemID: record.itemID,
+                    cycleKey: CycleDate.remapCycleKey(
+                        record.cycleKey,
+                        payday: data.payday,
+                        from: previousHolidayKeys,
+                        to: holidayKeys
+                    ),
+                    step: record.step,
+                    completedAt: record.completedAt
+                )
+            }
+            data.holidayDates = holidayKeys.sorted()
+            persist(removeDeliveredNotifications: true)
+            holidaySyncMessage = "공휴일 \(holidayKeys.count)개를 동기화했습니다."
+        } catch {
+            holidaySyncMessage = "공휴일 동기화에 실패했습니다: \(error.localizedDescription)"
+        }
     }
 
     func delete(at offsets: IndexSet) {

@@ -63,19 +63,20 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 
 ### Dynamic Island compact
 
-- leading: checkmark icon
-- trailing: 미완료 개수
-
-단계별 입금/저축 집계와 DonCheck 전용 leading icon으로 바꾸는 디자인은 [제품 로드맵 NEXT-003](../product/roadmap.md#next-003-dynamic-island-단계별-요약-디자인)에 정의되어 있으며 아직 구현 전이다.
+- leading: mint 원화 symbol과 checkmark를 겹친 `DonCheckMark`
+- trailing: 전체, 입금 완료, 저축 완료의 symbol+숫자 집계
+- compact 폭이 부족하면 `전체·입금·저축` 순서의 `N·M·O` 숫자열로 fallback
+- 자동이체 확인 대상이 없으면 저축 metric 생략
+- VoiceOver는 `전체 N개 중 M개 입금 완료, O개 저축 완료` 전체 문장을 사용
 
 ### Dynamic Island minimal
 
-원형 mint background에 미완료 개수를 표시한다. 다른 Live Activity가 동시에 있을 때 시스템이 minimal presentation을 사용할 수 있다.
+compactLeading과 같은 `DonCheckMark`를 표시한다. 다른 Live Activity가 동시에 있을 때 시스템이 minimal presentation을 사용할 수 있으며 VoiceOver에는 전체 진행 요약을 제공한다.
 
 ### Dynamic Island expanded
 
-- leading: `저축`
-- trailing: `N개 남음`
+- leading: `DonCheckMark`와 `DonCheck` 이름
+- trailing: 전체 N개, 입금 M개, 필요한 경우 저축 O개
 - bottom: 미완료 항목 최대 3개
 
 ## 4. 사용자 상호작용
@@ -110,15 +111,16 @@ ActivityKit content payload에는 크기 제한이 있다. 현재 모든 항목�
 
 ## 6. 자동 시작 조건
 
-iOS 26 이상에서 `refresh`는 현재 월급 주기의 미완료 항목 중 하나라도 주의 시점에 도달했는지 확인한다.
+`refresh`는 현재와 다음 월급 주기에 대해 두 종류의 attention window를 만든다.
 
 ```text
-주의 시점 = 출금 예정 시각 - leadDays
+입금 window 시작 = 주말·공휴일을 이전 방향으로 보정한 실제 월급일 - 1일, 00:00
+저축 window 시작 = 주말·공휴일을 다음 방향으로 보정한 실제 자동이체일 - 1일, 00:00
 ```
 
-주의 시점이 현재보다 과거이고 active activity가 없으면 즉시 시작을 시도한다. 아직 미래라면 해당 시점에 시작하도록 scheduled Live Activity를 만든다.
+입금 completion이 없으면 입금 window가, 자동이체 completion이 없으면 해당 항목의 저축 window가 유지된다. 여러 window가 동시에 열리면 가장 최근에 시작한 window의 cycle과 subtitle을 표시한다. 실제 월급일 전날 시작한 입금 window는 다음 cycle key를 미리 사용하므로 그때 체크한 상태가 월급일 이후에도 유지된다. 공휴일 캐시가 변경되면 저장 직후 모든 active/pending activity를 새 날짜로 재구성한다.
 
-iOS 17~25에는 scheduled start API가 없으므로 자동 미래 시작을 하지 않는다. 로컬 notification을 받고 앱에서 수동 시작할 수 있다.
+iOS 26 이상에서는 미래 window 시각에 scheduled Live Activity를 만들 수 있다. iOS 17~25에서는 미래 예약 API가 없지만, window가 열린 상태에서 앱이 실행되어 `refresh`가 호출되면 즉시 시작한다.
 
 ## 7. 릴레이 유지 알고리즘
 
@@ -153,25 +155,23 @@ relay interval = 7시간 55분
 
 `LiveActivityManager.refresh` 순서:
 
-1. 현재 월급 주기 content state 생성
-2. 모든 active activity 조회
-3. 미완료가 없으면 active를 immediate dismissal로 종료
-4. 미완료가 있으면 active content update
-5. iOS 26 미만 또는 Live Activity 비활성화면 종료
-6. 기존 pending activity 종료
-7. 필요하면 현재 activity 즉시 시작
-8. relay event 계산
-9. active slot을 고려한 개수만 scheduled request 생성
+1. 현재/다음 주기의 미완료 단계에서 attention window 생성
+2. 현재 열린 window가 없으면 active activity 종료
+3. 열린 window가 있으면 해당 cycle content로 active update 또는 즉시 시작
+4. iOS 26 미만이면 미래 예약 단계 종료
+5. 기존 pending activity 종료
+6. 가장 이른 attention window부터 relay event 계산
+7. active slot을 고려한 개수만 scheduled request 생성
 
 자동 refresh 실패는 알림과 앱 기능을 막지 않도록 삼킨다. 수동 시작은 UI에 오류를 보여 준다.
 
 ## 9. 완료 시 종료
 
-현재 월급 주기의 모든 항목이 완료되면:
+현재 attention window의 대상 단계가 완료되면:
 
-- active activity를 `.immediate` dismissal policy로 종료
-- iOS 26 이상 pending activity도 모두 종료
-- 배지는 0으로 변경
+- 다른 열린 window가 있으면 해당 cycle/state로 갱신
+- 열린 window가 없으면 active activity를 `.immediate` dismissal policy로 종료
+- iOS 26 이상 pending activity를 남은 미래 window 기준으로 다시 생성
 - 완료된 item의 notification 제거
 
 ## 10. Dynamic Island 우선순위

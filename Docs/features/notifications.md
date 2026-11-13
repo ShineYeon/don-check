@@ -80,7 +80,7 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 ### 4.3 저축 완료 확인 알림
 
 - 조건: `requiresAutomaticTransferConfirmation == true`
-- 시각: 출금일의 reminder hour/minute
+- 시각: 항목별 `automaticTransferDay`를 주말·공휴일이면 다음 영업일로 보정한 날짜의 reminder hour/minute
 - 문구: `자동이체가 완료됐는지 확인하세요`
 - action: `저축 완료`
 - interruption level: `.timeSensitive`
@@ -88,7 +88,7 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 ### 4.4 재알림
 
 - 조건: 알림 대상 월급 주기의 항목이 미완료이며 `followUpCount > 0`
-- 시각: 출금일 이후 1일부터 `followUpCount`일까지 같은 시각
+- 시각: 입금 단계는 출금일, 저축 단계는 실제 자동이체일 이후 1일부터 `followUpCount`일까지 같은 시각
 - 문구: 단계에 따라 입금 미완료 또는 저축 완료 미확인 안내
 - interruption level: `.timeSensitive`
 
@@ -100,8 +100,8 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 
 1. 시스템에서 pending notification request를 조회한다.
 2. identifier가 `doncheck.`로 시작하는 request를 제거한다.
-3. 현재 월급 주기 안에서 항목별 출금일을 계산하고 미완료 단계별 early/due/follow-up 후보를 생성한다.
-4. 다음 월급 주기 안에서 항목별 출금일을 계산하고 미완료 단계별 early/due 후보를 생성한다.
+3. 현재 월급 주기 안에서 실제 월급일은 이전 영업일, 실제 자동이체일은 다음 영업일로 계산하고 미완료 단계별 early/due/follow-up 후보를 생성한다.
+4. 다음 월급 주기 안에서 같은 단계별 early/due 후보를 생성한다.
 5. 이미 지난 후보를 제거한다.
 6. 날짜 오름차순으로 정렬한다.
 7. 가장 가까운 60개를 시스템에 등록한다.
@@ -117,7 +117,7 @@ delivered notification은 pending 목록에 존재하지 않기 때문에 두 �
 
 이후 `rescheduleAll`을 호출해 다른 항목과 다음 주기 알림을 유지한다.
 
-월급일을 변경하는 경우에는 이전 주기 문맥으로 이미 전달된 DonCheck 알림 전체를 제거한 뒤 pending request를 새 주기로 다시 만든다. 다른 앱의 알림에는 영향을 주지 않는다.
+월급일을 변경하거나 공휴일 캘린더를 다시 동기화한 경우에는 이전 주기 문맥으로 이미 전달된 DonCheck 알림 전체를 제거한 뒤 pending request를 새 실제 날짜로 다시 만든다. 다른 앱의 알림에는 영향을 주지 않는다.
 
 ## 7. 알림 액션 처리
 

@@ -35,7 +35,7 @@ gallery placeholder는 청약저축과 연금저축 sample을 사용한다. 실�
 
 ### Timeline
 
-현재 entry 한 개를 만들고 다음 월급일 00:00 이후 reload하도록 `.after(nextPayday)` policy를 반환한다. 이 reload는 cycle key가 새 월급 주기로 전환되는 데 필요하다.
+현재 entry 한 개를 만들고 주말·공휴일 보정된 다음 실제 월급일 00:00 이후 reload하도록 `.after(nextPayday)` policy를 반환한다. 공휴일은 App Group의 `holidayDates` 캐시를 사용하므로 extension에서 Calendar 권한을 별도로 요청하지 않는다. 이 reload는 cycle key가 새 월급 주기로 전환되는 데 필요하다.
 
 사용자가 앱 또는 intent로 상태나 월급일을 변경하면 `WidgetCenter.shared.reloadAllTimelines()`를 별도로 호출하므로 다음 경계까지 기다리지 않는다.
 
@@ -160,6 +160,7 @@ WidgetKit refresh 시점은 최종적으로 시스템이 조정한다. `reloadAl
 - medium 3개, large 7개 truncation
 - 월급일 00:00 전후 cycle key 변경
 - 월급일 29~31일의 짧은 달 말일 보정
+- 공휴일 동기화 후 다음 실제 월급일 timeline reload 날짜 변경
 - 앱 체크 후 widget reload
 - widget 체크 후 앱 foreground reload
 - 자동이체 항목의 입금/저축 버튼 독립 동작
