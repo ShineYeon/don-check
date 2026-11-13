@@ -148,6 +148,7 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 
 ## 10. 향후 개선
 
+- 월급일을 경계로 한 체크 주기와 항목별 2단계 완료 체크는 [제품 로드맵](../product/roadmap.md)에 요구사항과 migration 방향을 정리한다.
 - 월별 history 조회 UI
 - 완료 취소 audit 기록
 - 항목 순서 재정렬

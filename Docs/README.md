@@ -7,22 +7,24 @@
 처음 프로젝트를 이해하는 경우 다음 순서를 권장합니다.
 
 1. [제품 요구사항](product/requirements.md)
-2. [아키텍처 개요](architecture/overview.md)
-3. [체크리스트와 월별 주기](features/checklist.md)
-4. [앱 UI와 상태 관리](features/app-ui.md)
-5. [저장소](data/storage.md)
-6. [알림](features/notifications.md)
-7. [Live Activity](features/live-activity.md)
-8. [위젯](features/widgets.md)
-9. [빌드와 서명](development/build-and-signing.md)
-10. [테스트](development/testing.md)
-11. [문제 해결](operations/troubleshooting.md)
+2. [제품 로드맵](product/roadmap.md)
+3. [아키텍처 개요](architecture/overview.md)
+4. [체크리스트와 월별 주기](features/checklist.md)
+5. [앱 UI와 상태 관리](features/app-ui.md)
+6. [저장소](data/storage.md)
+7. [알림](features/notifications.md)
+8. [Live Activity](features/live-activity.md)
+9. [위젯](features/widgets.md)
+10. [빌드와 서명](development/build-and-signing.md)
+11. [테스트](development/testing.md)
+12. [문제 해결](operations/troubleshooting.md)
 
 ## 영역별 문서
 
 ### Product
 
 - [requirements.md](product/requirements.md): 해결하려는 문제, 핵심 시나리오, 범위와 비범위
+- [roadmap.md](product/roadmap.md): 구현 예정 기능, 상세 요구사항, 수용 조건과 migration 방향
 
 ### Architecture
 

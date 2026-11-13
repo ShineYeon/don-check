@@ -227,6 +227,7 @@ Live Activity의 표시 우선순위와 Dynamic Island 점유는 iOS가 결정�
 |---|---|
 | [문서 인덱스](Docs/README.md) | 전체 문서 탐색 |
 | [제품 요구사항](Docs/product/requirements.md) | 목표, 비목표, 사용자 시나리오 |
+| [제품 로드맵](Docs/product/roadmap.md) | 월급일 초기화와 항목별 2단계 체크 등 구현 예정 기능 |
 | [아키텍처](Docs/architecture/overview.md) | 타깃, 프로세스, 데이터 흐름 |
 | [체크리스트와 월별 주기](Docs/features/checklist.md) | 모델과 완료 상태 계산 |
 | [앱 UI와 상태 관리](Docs/features/app-ui.md) | 화면 구조, 입력 검증, lifecycle |
