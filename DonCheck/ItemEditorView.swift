@@ -33,6 +33,7 @@ struct ItemEditorView: View {
                             Text("매월 말일")
                                 .tag(AutomaticTransferSchedule.monthEnd)
                         }
+                        .pickerStyle(.menu)
                     }
                     Text(draft.requiresAutomaticTransferConfirmation
                          ? "주말·공휴일을 보정한 실제 자동이체일 하루 전부터 저축 완료 확인이 잠금화면과 Dynamic Island에 표시됩니다."
@@ -42,7 +43,12 @@ struct ItemEditorView: View {
                 }
 
                 Section("매월 일정") {
-                    Stepper("출금일: \(draft.debitDay)일", value: $draft.debitDay, in: 1...31)
+                    Picker("출금일", selection: $draft.debitDay) {
+                        ForEach(1...31, id: \.self) { day in
+                            Text("매월 \(day)일").tag(day)
+                        }
+                    }
+                    .pickerStyle(.menu)
                     DatePicker(
                         "알림 시간",
                         selection: reminderTime,
