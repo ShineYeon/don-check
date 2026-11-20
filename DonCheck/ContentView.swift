@@ -75,7 +75,10 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     store.reload()
-                    Task { await store.refreshNotificationStatus() }
+                    Task {
+                        await store.refreshNotificationStatus()
+                        await store.syncHolidayCalendarIfAuthorized()
+                    }
                 }
             }
         }

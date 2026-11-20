@@ -179,8 +179,9 @@ trimmedName.isEmpty || amount <= 0
 ### 공휴일 section
 
 - `동기화 전`, `확인 중`, `N일 저장됨`, `권한 필요`, `캘린더 없음`, `일정 없음`, `동기화 실패` 상태 구분
-- `iPhone 공휴일 캘린더 동기화`를 누를 때만 EventKit full calendar access 요청
-- 권한 승인 직후 새 `EKEventStore`를 만들어 최신 calendar source 조회
+- `지금 공휴일 캘린더 동기화`를 누를 때만 EventKit full calendar access 요청
+- 권한 승인 후 앱 실행·foreground 복귀와 실행 중 Calendar DB 변경 시 자동 동기화
+- 장기 유지하는 `EKEventStore`로 변경 알림을 관찰하고 동기화 전에 calendar source refresh
 - calendar title 또는 source title에 `공휴일`, `휴일`, `holiday`, `public holiday`, `bank holiday`가 포함된 캘린더 수집
 - 종일 여부와 관계없이 대상 공휴일 캘린더 일정의 겹치는 날짜를 수집하며 종일 일정 end date는 exclusive 처리
 - 전년도 1월 1일부터 현재 연도 기준 2년 뒤 12월 31일까지 캐시
@@ -188,7 +189,7 @@ trimmedName.isEmpty || amount <= 0
 - 조회 결과가 비어 있거나 실패하면 기존 공휴일 캐시를 삭제하지 않음
 - 동기화 저장 후 위젯, 알림과 Live Activity를 새 영업일 일정으로 즉시 갱신
 
-iOS에는 공휴일 여부만 반환하는 별도 API가 없으므로 구독 캘린더가 데이터 원본이다. 앱은 캘린더 변경을 background에서 감시하지 않으며 사용자가 필요할 때 다시 동기화한다.
+iOS에는 공휴일 여부만 반환하는 별도 API가 없으므로 구독 캘린더가 데이터 원본이다. 실행 중 변경은 즉시 반영하고, 앱이 종료된 동안의 변경은 다음 실행 또는 foreground 복귀 때 반영한다. 수동 버튼은 최초 권한 요청과 오류 복구를 위해 유지한다.
 
 ### 잠금 화면 체크리스트 section
 
@@ -213,10 +214,11 @@ iOS에는 공휴일 여부만 반환하는 별도 API가 없으므로 구독 캘
 
 1. repository에서 최신 data reload
 2. notification authorization status refresh
+3. Calendar full access가 이미 허용된 경우 공휴일 캘린더 자동 동기화
 
 앱이 background에 있는 동안 widget intent나 notification action이 상태를 변경할 수 있으므로 foreground reload가 필요하다.
 
-현재 foreground 복귀만으로 notification/Live Activity 전체 재예약을 다시 호출하지는 않는다. 저장 변경 경로와 앱 초기화가 해당 작업을 담당한다.
+공휴일 캐시가 바뀌면 저장 변경 경로가 notification과 Live Activity를 새 영업일 기준으로 다시 예약한다. 실행 중에는 `EKEventStoreChanged`도 관찰해 캘린더 DB 변경을 자동 반영한다. 앱이 종료된 동안 발생한 변경은 다음 실행 또는 foreground 복귀 시 반영된다.
 
 ## 8. 접근성과 현지화
 

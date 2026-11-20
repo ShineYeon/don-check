@@ -1,3 +1,4 @@
+import Combine
 import EventKit
 import Foundation
 import SwiftUI
@@ -61,12 +62,23 @@ final class ChecklistStore: ObservableObject {
     @Published private(set) var holidaySyncState: HolidaySyncState = .notStarted
 
     private let repository: ChecklistRepository
+    private let holidayEventStore = EKEventStore()
+    private var holidayCalendarObserver: AnyCancellable?
 
     init(repository: ChecklistRepository = .shared) {
         self.repository = repository
         reload()
+        holidayCalendarObserver = NotificationCenter.default
+            .publisher(for: .EKEventStoreChanged, object: holidayEventStore)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.syncHolidayCalendarIfAuthorized()
+                }
+            }
         Task {
             await refreshNotificationStatus()
+            await syncHolidayCalendarIfAuthorized()
             await NotificationScheduler.rescheduleAll(data)
             await LiveActivityManager.refresh(data)
 #if DEBUG
@@ -113,6 +125,16 @@ final class ChecklistStore: ObservableObject {
     }
 
     func syncHolidayCalendar() async {
+        await syncHolidayCalendar(requestAccess: true)
+    }
+
+    func syncHolidayCalendarIfAuthorized() async {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
+        await syncHolidayCalendar(requestAccess: false)
+    }
+
+    private func syncHolidayCalendar(requestAccess: Bool) async {
+        guard !holidaySyncState.isSyncing else { return }
         holidaySyncState = .syncing
         let authorizationStore = EKEventStore()
         do {
@@ -122,18 +144,19 @@ final class ChecklistStore: ObservableObject {
                 granted = true
             } else if authorizationStatus == .denied || authorizationStatus == .restricted {
                 granted = false
-            } else {
+            } else if requestAccess {
                 granted = try await authorizationStore.requestFullAccessToEvents()
+            } else {
+                holidaySyncState = .notStarted
+                return
             }
             guard granted else {
                 holidaySyncState = .permissionDenied
                 return
             }
 
-            // Create a fresh store after the permission prompt so its sources
-            // reflect the authorization decision made in this session.
-            let eventStore = EKEventStore()
-            let allCalendars = eventStore.calendars(for: .event)
+            holidayEventStore.refreshSourcesIfNecessary()
+            let allCalendars = holidayEventStore.calendars(for: .event)
             let holidayCalendars = allCalendars.filter { eventCalendar in
                 HolidayDateImport.matchesCalendar(
                     title: eventCalendar.title,
@@ -151,12 +174,12 @@ final class ChecklistStore: ObservableObject {
             let end = calendar.date(from: DateComponents(year: currentYear + 3, month: 1, day: 1)) ?? .now
             let period = "\(currentYear - 1)~\(currentYear + 2)년"
             let sourceNames = Array(Set(holidayCalendars.map(\.title))).sorted()
-            let predicate = eventStore.predicateForEvents(
+            let predicate = holidayEventStore.predicateForEvents(
                 withStart: start,
                 end: end,
                 calendars: holidayCalendars
             )
-            let events = eventStore.events(matching: predicate)
+            let events = holidayEventStore.events(matching: predicate)
             var holidayKeys = Set<String>()
             for event in events {
                 holidayKeys.formUnion(HolidayDateImport.dateKeys(
@@ -171,21 +194,23 @@ final class ChecklistStore: ObservableObject {
             }
 
             let previousHolidayKeys = data.holidayDateSet
-            data.completions = data.completions.map { record in
-                return CompletionRecord(
-                    itemID: record.itemID,
-                    cycleKey: CycleDate.remapCycleKey(
-                        record.cycleKey,
-                        payday: data.payday,
-                        from: previousHolidayKeys,
-                        to: holidayKeys
-                    ),
-                    step: record.step,
-                    completedAt: record.completedAt
-                )
+            if previousHolidayKeys != holidayKeys {
+                data.completions = data.completions.map { record in
+                    return CompletionRecord(
+                        itemID: record.itemID,
+                        cycleKey: CycleDate.remapCycleKey(
+                            record.cycleKey,
+                            payday: data.payday,
+                            from: previousHolidayKeys,
+                            to: holidayKeys
+                        ),
+                        step: record.step,
+                        completedAt: record.completedAt
+                    )
+                }
+                data.holidayDates = holidayKeys.sorted()
+                persist(removeDeliveredNotifications: true)
             }
-            data.holidayDates = holidayKeys.sorted()
-            persist(removeDeliveredNotifications: true)
             holidaySyncState = .synced(
                 count: holidayKeys.count,
                 sources: sourceNames,

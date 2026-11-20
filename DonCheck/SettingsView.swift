@@ -29,7 +29,7 @@ struct SettingsView: View {
                         "동기화 상태",
                         value: store.holidaySyncState.valueText(cachedCount: store.data.holidayDates.count)
                     )
-                    Button("iPhone 공휴일 캘린더 동기화") {
+                    Button("지금 공휴일 캘린더 동기화") {
                         Task { await store.syncHolidayCalendar() }
                     }
                     .disabled(store.holidaySyncState.isSyncing)
@@ -43,7 +43,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    Text("구독 중인 공휴일 캘린더의 종일 일정을 읽어 월급일은 이전 영업일로, 자동이체일은 다음 영업일로 조정합니다. 캘린더가 바뀌면 다시 동기화해 주세요.")
+                    Text("최초 동기화에서 캘린더 접근을 허용하면 앱 실행·복귀 시와 실행 중 캘린더가 변경될 때 자동으로 갱신합니다. 월급일은 이전 영업일로, 자동이체일은 다음 영업일로 조정합니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
