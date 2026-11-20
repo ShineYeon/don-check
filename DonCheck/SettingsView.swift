@@ -25,11 +25,20 @@ struct SettingsView: View {
                 }
 
                 Section("공휴일") {
-                    LabeledContent("저장된 날짜", value: "\(store.data.holidayDates.count)개")
+                    LabeledContent(
+                        "동기화 상태",
+                        value: store.holidaySyncState.valueText(cachedCount: store.data.holidayDates.count)
+                    )
                     Button("iPhone 공휴일 캘린더 동기화") {
                         Task { await store.syncHolidayCalendar() }
                     }
-                    if let message = store.holidaySyncMessage {
+                    .disabled(store.holidaySyncState.isSyncing)
+                    if store.holidaySyncState.isSyncing {
+                        ProgressView("공휴일 캘린더 확인 중")
+                    }
+                    if let message = store.holidaySyncState.message(
+                        cachedCount: store.data.holidayDates.count
+                    ) {
                         Text(message)
                             .font(.footnote)
                             .foregroundStyle(.secondary)

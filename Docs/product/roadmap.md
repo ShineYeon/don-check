@@ -49,7 +49,7 @@ NEXT-002의 완료 상태는 NEXT-001에서 정의한 월급 주기에 귀속된
 - 월급일이 되어도 기존 completion을 일괄 삭제하지 않는다. 새 주기 키로 조회 결과가 자연스럽게 비어 있도록 한다.
 - 날짜 경계는 사용자의 현재 Calendar와 time zone을 따른다. 월급일 당일 00:00부터 새 주기로 간주하는 것을 기본안으로 한다.
 - 앱이 종료된 상태에서도 다음 실행, widget timeline 갱신, notification action 처리 시 현재 주기를 다시 계산한다. 정확히 00:00에 백그라운드 코드를 실행하는 방식에 의존하지 않는다.
-- NEXT-001에서 App Group 저장 키를 v2로 올렸고, 현재 v4 migration도 v1~v3의 월급일과 완료 기록을 보존한다.
+- NEXT-001에서 App Group 저장 키를 v2로 올렸고, 현재 v5 migration도 v1~v4의 월급일과 완료 기록을 보존한다.
 
 ### 월급일 변경 규칙
 
@@ -147,7 +147,7 @@ completion의 논리적 고유 키는 `(itemID, cycleKey, step)`이 된다. 최�
 
 ### 기존 데이터 migration
 
-NEXT-002에서 App Group 저장 키를 v3로 올렸다. 현재 v4 migration에서도 기존 항목은 `requiresAutomaticTransferConfirmation = false`, 기존 completion은 `step = .deposit`으로 해석한다.
+NEXT-002에서 App Group 저장 키를 v3로 올렸다. 현재 v5 migration에서도 기존 항목은 `requiresAutomaticTransferConfirmation = false`, 기존 completion은 `step = .deposit`으로 해석한다.
 
 자동이체 확인을 켠 기존 항목은 현재 주기의 입금 완료 상태는 유지하되 저축 완료 상태가 새로 미완료가 된다.
 
@@ -234,17 +234,18 @@ compact 영역은 폭이 매우 좁으므로 `ViewThatFits`를 사용한다. 공
 
 ### 구현 내용
 
-- 자동이체 확인 항목에 `automaticTransferDay` 1~31 설정 추가
+- 자동이체 확인 항목에 `automaticTransferDay` 1~31 및 실제 `말일` 설정 추가
 - 자동이체일이 없는 기존 v3 항목은 기존 `debitDay` 값으로 migration
 - 명목 월급일이 주말 또는 동기화한 공휴일이면 연속 휴일을 건너뛴 직전 영업일을 실제 주기 시작일로 사용
 - 명목 자동이체일이 주말 또는 동기화한 공휴일이면 연속 휴일을 건너뛴 다음 영업일을 실제 이체일로 사용
-- 설정에서 iPhone 구독 공휴일 캘린더를 명시적으로 동기화하고 전년도부터 향후 2년까지의 종일 날짜를 App Group에 캐시
+- 설정에서 iPhone 구독 공휴일 캘린더를 명시적으로 동기화하고 전년도부터 향후 2년까지의 일정 날짜를 App Group에 캐시
+- 공휴일 캘린더 이름·source 이름을 함께 검사하고 빈 결과는 오류 상태로 표시하여 기존 캐시 보존
 - 실제 월급일 하루 전 00:00부터 입금 미완료 cycle의 Live Activity 시작
 - 영업일 보정된 항목별 실제 자동이체일 하루 전 00:00부터 저축 미완료 cycle의 Live Activity 시작
 - 입금 또는 저축 단계를 체크하면 해당 attention window가 제거되고 active/pending activity를 재구성
 - 월급일 하루 전에는 다음 cycle key를 사용하므로 미리 체크한 입금 상태가 월급일 이후에도 유지
 - 공휴일 캐시 변경 시 completion cycle key를 새 실제 월급일 키로 매핑하여 체크 상태 유지
-- v1~v3 completion cycle key를 영업일 보정된 실제 월급일 키로 migration
+- v1~v4 completion cycle key를 영업일 보정된 실제 월급일 키로 migration
 
 ### 플랫폼 동작
 
@@ -260,6 +261,7 @@ compact 영역은 폭이 매우 좁으므로 `ViewThatFits`를 사용한다. 공
 - 자동이체 Live Activity는 설정일 하루 전 00:00부터 저축 완료까지 표시 대상이다.
 - 서로 다른 자동이체일을 가진 항목들이 각각 올바른 attention window를 생성한다.
 - 월말 29~31일 자동이체일은 짧은 달의 마지막 날로 보정된다.
+- 명시적 말일 자동이체가 평년·윤년과 30일/31일 월에서 실제 마지막 날로 계산된다.
 - 공휴일 캘린더 미허용·미발견 상태에서는 안내 문구를 표시하고 주말 보정은 계속 동작한다.
 - 기존 v3 데이터의 자동이체일과 완료 상태가 migration 후 유지된다.
 

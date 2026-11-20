@@ -153,7 +153,7 @@ private struct SavingsItemRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         if item.requiresAutomaticTransferConfirmation {
-                            Text("자동이체 매월 \(item.automaticTransferDay)일")
+                            Text("자동이체 \(item.automaticTransferDayText)")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }

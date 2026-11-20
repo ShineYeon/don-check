@@ -6,7 +6,7 @@ DonCheck는 App Group `UserDefaults`에 `ChecklistData` 전체를 JSON `Data`로
 
 ```text
 Suite: group.com.heeyeon.DonCheck
-Key:   checklist-data-v4
+Key:   checklist-data-v5
 Value: JSONEncoder로 인코딩한 Data
 ```
 
@@ -41,6 +41,7 @@ struct ChecklistData: Codable {
       "followUpCount": 3,
       "requiresAutomaticTransferConfirmation": true,
       "automaticTransferDay": 10,
+      "automaticTransferUsesMonthEnd": false,
       "createdAt": 815000000
     }
   ],
@@ -74,7 +75,7 @@ struct ChecklistData: Codable {
 ### save
 
 1. `JSONEncoder`로 전체 객체 encode
-2. defaults의 `checklist-data-v4` key에 저장
+2. defaults의 `checklist-data-v5` key에 저장
 
 encode 실패는 현재 무시한다. 모든 필드가 표준 Codable 타입이므로 일반 상태에서 실패하지 않지만 운영 진단을 위해 logging을 추가할 수 있다.
 
@@ -129,19 +130,22 @@ suite를 만들 수 없으면 standard defaults로 fallback한다. 앱 단독 �
 저장 key suffix가 사실상의 schema version이다.
 
 ```text
-checklist-data-v4
+checklist-data-v5
 ```
 
-v4는 `SavingsItem.automaticTransferDay`, 영업일 보정과 `ChecklistData.holidayDates` 공휴일 캐시를 도입했다. 공휴일 키는 기기 캘린더 기준 `yyyy-MM-dd` 문자열이며 중복 제거 후 정렬해 저장한다. v4가 없으면 repository가 v3, v2, v1 순서로 legacy payload를 찾아 migration한다.
+v5는 `SavingsItem.automaticTransferUsesMonthEnd`를 추가한다. `true`이면 `automaticTransferDay` 숫자를 사용하지 않고 대상 연월의 `Calendar.range(of:in:for:)` 결과로 실제 마지막 날을 계산한다. v4 이하 payload에는 이 필드가 없으므로 custom decoder가 `false`를 적용하여 기존 숫자 자동이체일을 그대로 보존한다.
+
+v4는 `SavingsItem.automaticTransferDay`, 영업일 보정과 `ChecklistData.holidayDates` 공휴일 캐시를 도입했다. 공휴일 키는 기기 캘린더 기준 `yyyy-MM-dd` 문자열이며 중복 제거 후 정렬해 저장한다. v5가 없으면 repository가 v4, v3, v2, v1 순서로 legacy payload를 찾아 migration한다.
 
 1. 자동이체일이 없는 항목은 기존 `debitDay`를 기본값으로 적용
 2. v2 항목은 `requiresAutomaticTransferConfirmation = false` 적용
 3. v2 completion은 `step = deposit` 적용
 4. v1은 추가로 `payday = 1`과 구형 월 키 변환
 5. 모든 legacy completion key를 당시 캐시된 공휴일과 주말을 반영한 실제 월급일 key로 변환
-6. 결과를 v4 key에 저장
+6. `automaticTransferUsesMonthEnd`가 없으면 `false` 적용
+7. 결과를 v5 key에 저장
 
-각 모델의 custom decoder가 누락된 신규 필드에 호환 기본값을 적용한다. `holidayDates`가 없는 기존 v4 payload는 빈 배열로 읽혀 주말 보정만 유지한다. 캘린더를 새로 동기화하면 기존 completion의 cycle key도 새 영업일 경계로 매핑한 뒤 저장하므로 현재 완료 상태가 유실되지 않는다. legacy key는 migration 후에도 즉시 삭제하지 않아 복구 여지를 남기지만 이후 읽기와 쓰기는 v4를 우선한다.
+각 모델의 custom decoder가 누락된 신규 필드에 호환 기본값을 적용한다. `holidayDates`가 없는 기존 payload는 빈 배열로 읽혀 주말 보정만 유지한다. 캘린더를 새로 동기화하면 기존 completion의 cycle key도 새 영업일 경계로 매핑한 뒤 저장하므로 현재 완료 상태가 유실되지 않는다. legacy key는 migration 후에도 즉시 삭제하지 않아 복구 여지를 남기지만 이후 읽기와 쓰기는 v5를 우선한다.
 
 ActivityKit attributes는 `UserDefaults`와 별도로 시스템이 보존할 수 있다. `scheduledStart`를 optional로 둔 이유도 이전 activity payload와의 호환성 때문이다.
 

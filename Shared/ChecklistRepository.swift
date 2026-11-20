@@ -3,8 +3,13 @@ import Foundation
 final class ChecklistRepository {
     static let shared = ChecklistRepository()
 
-    private let dataKey = "checklist-data-v4"
-    private let legacyDataKeys = ["checklist-data-v3", "checklist-data-v2", "checklist-data-v1"]
+    private let dataKey = "checklist-data-v5"
+    private let legacyDataKeys = [
+        "checklist-data-v4",
+        "checklist-data-v3",
+        "checklist-data-v2",
+        "checklist-data-v1"
+    ]
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()

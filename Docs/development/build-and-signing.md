@@ -172,9 +172,10 @@ Widget extension의 `Info.plist`에는 최소 다음 값이 들어간다.
 - 실제 기기에서 알림 권한과 Live Activity 권한 확인
 - 앱/위젯 Bundle ID 및 version 일치
 - App Group production provisioning 확인
-- 앱 아이콘 및 privacy metadata 추가
+- `Assets.xcassets/AppIcon.appiconset`의 저금통 앱 아이콘과 빌드 산출물 확인
+- App Store 제출 전 privacy metadata 검토
 - 잠금 화면 금액 노출에 대한 제품 정책 검토
 - extension binary가 앱에 포함되는지 archive에서 확인
 - 장기 relay가 실제 기기에서 시스템 정책에 따라 동작하는지 검증
 
-현재 프로젝트는 개인 설치용 MVP이며 App Store 제출에 필요한 icon, screenshots, privacy manifest 검토와 store metadata 작업은 별도다.
+현재 프로젝트에는 1024×1024 저금통 AppIcon이 포함되어 있다. 개인 설치용 MVP이며 App Store 제출에 필요한 screenshots, privacy manifest 검토와 store metadata 작업은 별도다.

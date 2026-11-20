@@ -43,6 +43,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
 | `followUpCount` | 출금 후 일별 재알림 수 | 0...7 |
 | `requiresAutomaticTransferConfirmation` | 저축 완료 2단계 확인 여부 | Toggle |
 | `automaticTransferDay` | 자동이체 확인 항목의 실제 매월 이체일 | 1...31 |
+| `automaticTransferUsesMonthEnd` | 숫자 대신 대상 연월의 실제 말일 사용 여부 | Boolean |
 | `createdAt` | 생성 시각 | 자동 설정 |
 
 `amount`는 통화 소수점을 사용하지 않는다. 다른 통화를 지원하려면 통화 코드와 minor unit 정책을 모델에 추가해야 한다.
@@ -97,7 +98,9 @@ data.isComplete(item.id, cycleKey: "2026-11-25")
 
 시간대는 `Calendar.current.timeZone`을 사용한다. 사용자가 기기 시간대를 바꾸면 다음 재계산부터 새 시간대가 적용된다.
 
-자동이체 확인 항목은 `CycleDate.automaticTransferDate(for:cycleStarting:holidays:)`로 현재 월급 주기 안의 이체일을 계산한다. 29~31일이 없는 달에는 먼저 말일로 보정한 다음, 토·일요일 또는 동기화한 공휴일인 동안 하루씩 앞으로 이동한다. 월급일과 달리 자동이체는 다음 영업일 규칙이므로 일요일 뒤 월요일까지 공휴일이면 화요일이 실제 이체일이다. 알림 시각의 hour/minute는 날짜를 이동해도 유지한다.
+자동이체 확인 항목은 `CycleDate.automaticTransferDate(for:cycleStarting:holidays:)`로 현재 월급 주기 안의 이체일을 계산한다. `automaticTransferSchedule`은 `.day(1...31)` 또는 `.monthEnd`다. `.monthEnd`는 고정 31일 sentinel이 아니라 대상 연월의 실제 day range를 사용하므로 평년 2월 28일, 윤년 2월 29일, 4월 30일과 1월 31일이 각각 정확히 선택된다.
+
+명목 날짜를 계산한 다음 토·일요일 또는 동기화한 공휴일인 동안 하루씩 앞으로 이동한다. 월급일과 달리 자동이체는 다음 영업일 규칙이므로 말일이 토요일이고 다음 월요일이 공휴일이면 화요일이 실제 이체일이다. 알림 시각의 hour/minute는 날짜를 이동해도 유지한다. 알림과 Live Activity는 모두 이 함수를 사용하므로 말일 규칙을 별도로 중복 구현하지 않는다.
 
 ## 5. CRUD 흐름
 

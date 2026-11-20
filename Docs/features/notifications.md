@@ -80,7 +80,7 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 ### 4.3 저축 완료 확인 알림
 
 - 조건: `requiresAutomaticTransferConfirmation == true`
-- 시각: 항목별 `automaticTransferDay`를 주말·공휴일이면 다음 영업일로 보정한 날짜의 reminder hour/minute
+- 시각: 항목별 숫자 또는 실제 말일 자동이체일을 계산하고 주말·공휴일이면 다음 영업일로 보정한 날짜의 reminder hour/minute
 - 문구: `자동이체가 완료됐는지 확인하세요`
 - action: `저축 완료`
 - interruption level: `.timeSensitive`

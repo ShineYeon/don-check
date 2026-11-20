@@ -138,7 +138,7 @@ followUpCount: 3
 `완료 단계`:
 
 - `자동이체 후 저축 완료 확인` Toggle
-- Toggle on일 때 `자동이체일` Stepper 1...31
+- Toggle on일 때 `자동이체일` Picker에서 1...31 또는 `말일` 선택
 - Toggle off: 입금 완료 하나로 최종 완료
 - Toggle on: 입금 완료와 저축 완료가 모두 필요
 
@@ -178,11 +178,14 @@ trimmedName.isEmpty || amount <= 0
 
 ### 공휴일 section
 
-- App Group에 캐시된 공휴일 날짜 개수 표시
+- `동기화 전`, `확인 중`, `N일 저장됨`, `권한 필요`, `캘린더 없음`, `일정 없음`, `동기화 실패` 상태 구분
 - `iPhone 공휴일 캘린더 동기화`를 누를 때만 EventKit full calendar access 요청
-- 이름에 `공휴일`, `holiday` 또는 `holidays`가 포함된 구독 캘린더의 종일 일정만 수집
+- 권한 승인 직후 새 `EKEventStore`를 만들어 최신 calendar source 조회
+- calendar title 또는 source title에 `공휴일`, `휴일`, `holiday`, `public holiday`, `bank holiday`가 포함된 캘린더 수집
+- 종일 여부와 관계없이 대상 공휴일 캘린더 일정의 겹치는 날짜를 수집하며 종일 일정 end date는 exclusive 처리
 - 전년도 1월 1일부터 현재 연도 기준 2년 뒤 12월 31일까지 캐시
-- 성공, 권한 거부, 대상 캘린더 미발견과 EventKit 오류를 화면에 표시
+- 성공, 권한 거부, 대상 캘린더 미발견, 기간 내 일정 없음과 EventKit 오류를 원인별로 표시
+- 조회 결과가 비어 있거나 실패하면 기존 공휴일 캐시를 삭제하지 않음
 - 동기화 저장 후 위젯, 알림과 Live Activity를 새 영업일 일정으로 즉시 갱신
 
 iOS에는 공휴일 여부만 반환하는 별도 API가 없으므로 구독 캘린더가 데이터 원본이다. 앱은 캘린더 변경을 background에서 감시하지 않으며 사용자가 필요할 때 다시 동기화한다.

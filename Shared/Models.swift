@@ -1,5 +1,19 @@
 import Foundation
 
+enum AutomaticTransferSchedule: Hashable {
+    case day(Int)
+    case monthEnd
+
+    var displayText: String {
+        switch self {
+        case .day(let day):
+            return "매월 \(day)일"
+        case .monthEnd:
+            return "매월 말일"
+        }
+    }
+}
+
 struct SavingsItem: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
@@ -11,6 +25,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
     var followUpCount: Int
     var requiresAutomaticTransferConfirmation: Bool
     var automaticTransferDay: Int
+    var automaticTransferUsesMonthEnd: Bool
     var createdAt: Date
 
     init(
@@ -24,6 +39,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         followUpCount: Int = 3,
         requiresAutomaticTransferConfirmation: Bool = false,
         automaticTransferDay: Int? = nil,
+        automaticTransferUsesMonthEnd: Bool = false,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -36,7 +52,27 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         self.followUpCount = followUpCount
         self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
         self.automaticTransferDay = min(max(automaticTransferDay ?? debitDay, 1), 31)
+        self.automaticTransferUsesMonthEnd = automaticTransferUsesMonthEnd
         self.createdAt = createdAt
+    }
+
+    var automaticTransferSchedule: AutomaticTransferSchedule {
+        get {
+            automaticTransferUsesMonthEnd ? .monthEnd : .day(automaticTransferDay)
+        }
+        set {
+            switch newValue {
+            case .day(let day):
+                automaticTransferDay = min(max(day, 1), 31)
+                automaticTransferUsesMonthEnd = false
+            case .monthEnd:
+                automaticTransferUsesMonthEnd = true
+            }
+        }
+    }
+
+    var automaticTransferDayText: String {
+        automaticTransferSchedule.displayText
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -50,6 +86,7 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         case followUpCount
         case requiresAutomaticTransferConfirmation
         case automaticTransferDay
+        case automaticTransferUsesMonthEnd
         case createdAt
     }
 
@@ -71,6 +108,10 @@ struct SavingsItem: Codable, Identifiable, Hashable {
             try container.decodeIfPresent(Int.self, forKey: .automaticTransferDay) ?? debitDay,
             1
         ), 31)
+        automaticTransferUsesMonthEnd = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .automaticTransferUsesMonthEnd
+        ) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
@@ -259,7 +300,7 @@ enum CycleDate {
         calendar: Calendar = .current
     ) -> Date {
         let scheduled = scheduledDate(
-            day: item.automaticTransferDay,
+            schedule: item.automaticTransferSchedule,
             hour: item.reminderHour,
             minute: item.reminderMinute,
             cycleStarting: cycleStart,
@@ -365,7 +406,7 @@ enum CycleDate {
     }
 
     private static func scheduledDate(
-        day: Int,
+        schedule: AutomaticTransferSchedule,
         hour: Int,
         minute: Int,
         cycleStarting cycleStart: Date,
@@ -373,7 +414,7 @@ enum CycleDate {
     ) -> Date {
         let start = calendar.startOfDay(for: cycleStart)
         let sameMonth = date(
-            day: day,
+            schedule: schedule,
             hour: hour,
             minute: minute,
             monthContaining: start,
@@ -381,18 +422,30 @@ enum CycleDate {
         )
         if sameMonth >= start { return sameMonth }
         let nextMonth = offset(1, from: firstDayOfMonth(containing: start, calendar: calendar), calendar: calendar)
-        return date(day: day, hour: hour, minute: minute, monthContaining: nextMonth, calendar: calendar)
+        return date(
+            schedule: schedule,
+            hour: hour,
+            minute: minute,
+            monthContaining: nextMonth,
+            calendar: calendar
+        )
     }
 
     private static func date(
-        day: Int,
+        schedule: AutomaticTransferSchedule,
         hour: Int,
         minute: Int,
         monthContaining date: Date,
         calendar: Calendar
     ) -> Date {
         let monthRange = calendar.range(of: .day, in: .month, for: date)
-        let validDay = min(max(day, 1), monthRange?.count ?? day)
+        let validDay: Int
+        switch schedule {
+        case .day(let day):
+            validDay = min(max(day, 1), monthRange?.count ?? day)
+        case .monthEnd:
+            validDay = monthRange?.count ?? 31
+        }
         let month = calendar.dateComponents([.year, .month], from: date)
         return calendar.date(from: DateComponents(
             calendar: calendar,
@@ -414,6 +467,45 @@ enum CycleDate {
             month: month.month,
             day: 1
         )) ?? date
+    }
+}
+
+enum HolidayDateImport {
+    private static let calendarNameKeywords = [
+        "공휴일",
+        "휴일",
+        "holiday",
+        "holidays",
+        "public holiday",
+        "bank holiday"
+    ]
+
+    static func matchesCalendar(title: String, sourceTitle: String = "") -> Bool {
+        let searchable = "\(title) \(sourceTitle)"
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        return calendarNameKeywords.contains { searchable.contains($0) }
+    }
+
+    static func dateKeys(
+        startDate: Date,
+        endDate: Date,
+        calendar: Calendar = .current
+    ) -> Set<String> {
+        var keys = Set<String>()
+        var candidate = calendar.startOfDay(for: startDate)
+        let exclusiveEnd = max(endDate, startDate.addingTimeInterval(1))
+
+        repeat {
+            keys.insert(CycleDate.dayKey(for: candidate, calendar: calendar))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: candidate),
+                  next < exclusiveEnd else {
+                break
+            }
+            candidate = next
+        } while true
+
+        return keys
     }
 }
 

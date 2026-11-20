@@ -2,13 +2,26 @@
 
 ## 1. 현재 상태
 
-현재 프로젝트에는 XCTest unit test target이나 XCUITest target이 없다. 검증은 다음 세 층으로 수행한다.
+현재 프로젝트에는 XCTest unit test target이나 XCUITest target이 없다. 대신 Foundation 기반 독립 회귀 테스트 `Tests/ModelRegressionTests.swift`를 제공한다. 검증은 다음 세 층으로 수행한다.
 
 1. Swift typecheck/compile
 2. app + extension 전체 Xcode build
 3. Simulator 또는 실제 기기의 수동 기능 검증
 
 기능이 늘어나면 날짜 계산, repository, scheduler candidate 생성부터 unit test로 분리하는 것이 우선순위다.
+
+독립 회귀 테스트 실행:
+
+```bash
+swiftc \
+  Shared/AppConfig.swift \
+  Shared/Models.swift \
+  Shared/ChecklistRepository.swift \
+  Tests/ModelRegressionTests.swift \
+  -o /tmp/doncheck-model-tests
+
+/tmp/doncheck-model-tests
+```
 
 ## 2. 빌드 검증
 
@@ -96,15 +109,19 @@ git diff --check
 | 다음 달 월급일 보정일이 현재 달 | 보정된 이전 영업일부터 다음 cycle |
 | 월급일 변경 | 현재 cycle 재계산 및 system UI 동기화 |
 | 자동이체일 31일, 짧은 달 | 해당 달 말일 이체일 |
+| 말일 자동이체, 평년/윤년 2월 | 각각 28일/29일 |
+| 말일 자동이체, 4월/1월 | 각각 30일/31일 |
+| 말일이 주말이고 다음 평일이 공휴일 | 공휴일 다음 첫 영업일 |
 | 자동이체일이 일요일, 다음 월요일도 공휴일 | 화요일의 기존 알림 시각으로 이체일 이동 |
-| 공휴일 캐시가 없는 기존 v4 payload | decode 성공 및 주말만 보정 |
+| 기존 v4 숫자 자동이체 payload | 숫자 유지, 말일 옵션 false, v5 저장 |
+| 공휴일 캐시가 없는 기존 payload | decode 성공 및 주말만 보정 |
 | 공휴일 재동기화로 cycle 경계 변경 | completion이 새 cycle key로 매핑되어 체크 유지 |
 | 월말 사전 알림 | 이전 달 날짜로 예약 |
 | 다른 시간대로 이동 | 다음 재예약에서 현지 calendar 적용 |
 
 자동화 시 `Calendar`와 `now`를 주입하고 고정 timezone을 사용해야 재현 가능한 테스트가 된다.
 
-EventKit 통합은 실제 기기에서 대한민국 공휴일 캘린더 활성화, 최초 권한 허용, 권한 거부, 캘린더 미발견을 각각 확인한다. 단위 테스트에서는 EventKit에 의존하지 않고 고정된 `Set<String>`을 `holidays` 인자로 주입한다.
+EventKit 통합은 실제 기기에서 대한민국 공휴일 캘린더 활성화, 최초 권한 허용, 권한 거부, 캘린더 미발견, 캘린더는 있으나 조회 기간에 일정이 없는 경우를 각각 확인한다. 단위 테스트에서는 EventKit에 의존하지 않고 제목/source matching, 일정 날짜 확장과 고정된 `Set<String>`을 검증한다.
 
 ## 6. 알림
 

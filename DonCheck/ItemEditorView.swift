@@ -25,11 +25,14 @@ struct ItemEditorView: View {
                 Section("완료 단계") {
                     Toggle("자동이체 후 저축 완료 확인", isOn: $draft.requiresAutomaticTransferConfirmation)
                     if draft.requiresAutomaticTransferConfirmation {
-                        Stepper(
-                            "자동이체일: 매월 \(draft.automaticTransferDay)일",
-                            value: $draft.automaticTransferDay,
-                            in: 1...31
-                        )
+                        Picker("자동이체일", selection: automaticTransferSchedule) {
+                            ForEach(1...31, id: \.self) { day in
+                                Text("매월 \(day)일")
+                                    .tag(AutomaticTransferSchedule.day(day))
+                            }
+                            Text("매월 말일")
+                                .tag(AutomaticTransferSchedule.monthEnd)
+                        }
                     }
                     Text(draft.requiresAutomaticTransferConfirmation
                          ? "주말·공휴일을 보정한 실제 자동이체일 하루 전부터 저축 완료 확인이 잠금화면과 Dynamic Island에 표시됩니다."
@@ -87,6 +90,14 @@ struct ItemEditorView: View {
             let components = Calendar.current.dateComponents([.hour, .minute], from: value)
             draft.reminderHour = components.hour ?? 8
             draft.reminderMinute = components.minute ?? 0
+        }
+    }
+
+    private var automaticTransferSchedule: Binding<AutomaticTransferSchedule> {
+        Binding {
+            draft.automaticTransferSchedule
+        } set: { value in
+            draft.automaticTransferSchedule = value
         }
     }
 }
