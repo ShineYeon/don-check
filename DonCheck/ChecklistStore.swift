@@ -62,20 +62,13 @@ final class ChecklistStore: ObservableObject {
     @Published private(set) var holidaySyncState: HolidaySyncState = .notStarted
 
     private let repository: ChecklistRepository
-    private let holidayEventStore = EKEventStore()
+    private var holidayEventStore = EKEventStore()
     private var holidayCalendarObserver: AnyCancellable?
 
     init(repository: ChecklistRepository = .shared) {
         self.repository = repository
         reload()
-        holidayCalendarObserver = NotificationCenter.default
-            .publisher(for: .EKEventStoreChanged, object: holidayEventStore)
-            .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    await self?.syncHolidayCalendarIfAuthorized()
-                }
-            }
+        observeHolidayCalendarChanges()
         Task {
             await refreshNotificationStatus()
             await syncHolidayCalendarIfAuthorized()
@@ -87,6 +80,23 @@ final class ChecklistStore: ObservableObject {
             }
 #endif
         }
+    }
+
+    private func observeHolidayCalendarChanges() {
+        holidayCalendarObserver = NotificationCenter.default
+            .publisher(for: .EKEventStoreChanged, object: holidayEventStore)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.syncHolidayCalendarIfAuthorized()
+                }
+            }
+    }
+
+    private func refreshHolidayEventStore() {
+        holidayCalendarObserver = nil
+        holidayEventStore = EKEventStore()
+        observeHolidayCalendarChanges()
     }
 
     var cycleKey: String { data.cycleKey(for: .now) }
@@ -155,6 +165,9 @@ final class ChecklistStore: ObservableObject {
                 return
             }
 
+            // An event store created before calendar access is granted can keep a
+            // stale source list. Recreate it after authorization and on each sync.
+            refreshHolidayEventStore()
             holidayEventStore.refreshSourcesIfNecessary()
             let allCalendars = holidayEventStore.calendars(for: .event)
             let holidayCalendars = allCalendars.filter { eventCalendar in
