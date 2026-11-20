@@ -160,24 +160,37 @@ enum LiveActivityError: LocalizedError {
 
 @MainActor
 enum LiveActivityManager {
+    private struct RefreshRequest {
+        let data: ChecklistData
+        let now: Date
+    }
+
+    private static var queuedRefresh: RefreshRequest?
+    private static var isRefreshing = false
+
     static func startNow(_ data: ChecklistData, subtitle: String = "완료할 항목을 체크하세요") async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw LiveActivityError.disabled }
         let state = manualContentState(data: data, subtitle: subtitle)
         guard state.remainingCount > 0 else { throw LiveActivityError.noIncompleteItems }
 
         let todayKey = dayKey(for: .now)
-        if let existing = Activity<SavingsChecklistAttributes>.activities.first(where: { $0.activityState == .active }) {
+        if let existing = await keepOnlyLatestActiveActivity() {
             await existing.update(ActivityContent(state: state, staleDate: staleDate(from: .now)))
             return
         }
 
         if #available(iOS 26.0, *) {
-            // Pending relay activities count toward the same system limit as an
+            // Pending scheduled activities count toward the same system limit as an
             // activity that starts now. Clear them first so the visible activity
             // always gets a slot; refresh() recreates successors afterward.
             for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
+        }
+
+        if let existing = await keepOnlyLatestActiveActivity() {
+            await existing.update(ActivityContent(state: state, staleDate: staleDate(from: .now)))
+            return
         }
 
         let attributes = SavingsChecklistAttributes(eventKey: todayKey, scheduledStart: .now)
@@ -186,14 +199,26 @@ enum LiveActivityManager {
     }
 
     static func refresh(_ data: ChecklistData, now: Date = .now) async {
+        queuedRefresh = RefreshRequest(data: data, now: now)
+        guard !isRefreshing else { return }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+        while let request = queuedRefresh {
+            queuedRefresh = nil
+            await performRefresh(request.data, now: request.now)
+        }
+    }
+
+    private static func performRefresh(_ data: ChecklistData, now: Date) async {
         let activeWindows = activeAttentionWindows(data: data, at: now)
 
         var hasActiveActivity = false
-        for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .active {
-            guard !activeWindows.isEmpty else {
+        if activeWindows.isEmpty {
+            for activity in visibleActivities() {
                 await activity.end(nil, dismissalPolicy: .immediate)
-                continue
             }
+        } else if let activity = await keepOnlyLatestActiveActivity() {
             hasActiveActivity = true
             let state = contentState(
                 data: data,
@@ -220,18 +245,28 @@ enum LiveActivityManager {
                         await activity.end(nil, dismissalPolicy: .immediate)
                     }
                 }
-                let state = contentState(
-                    data: data,
-                    windows: activeWindows,
-                    subtitle: subtitle(for: activeWindows)
-                )
-                let attributes = SavingsChecklistAttributes(
-                    eventKey: dayKey(for: now),
-                    scheduledStart: now
-                )
-                let content = ActivityContent(state: state, staleDate: staleDate(from: now))
-                _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
-                hasActiveActivity = true
+                if let existing = await keepOnlyLatestActiveActivity() {
+                    let state = contentState(
+                        data: data,
+                        windows: activeWindows,
+                        subtitle: subtitle(for: activeWindows)
+                    )
+                    await existing.update(ActivityContent(state: state, staleDate: staleDate(from: now)))
+                    hasActiveActivity = true
+                } else {
+                    let state = contentState(
+                        data: data,
+                        windows: activeWindows,
+                        subtitle: subtitle(for: activeWindows)
+                    )
+                    let attributes = SavingsChecklistAttributes(
+                        eventKey: dayKey(for: now),
+                        scheduledStart: now
+                    )
+                    let content = ActivityContent(state: state, staleDate: staleDate(from: now))
+                    _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
+                    hasActiveActivity = true
+                }
             } catch {
                 // The explicit start button reports errors to the UI. Automatic
                 // refresh keeps local notifications working if ActivityKit declines.
@@ -245,7 +280,7 @@ enum LiveActivityManager {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
 
-        let events = relayEvents(data: data, now: now)
+        let events = scheduledAttentionEvents(data: data, now: now)
         // The current system target limit is five. Keep one slot free whenever
         // an activity is visible so an explicit start can never be crowded out.
         let pendingLimit = hasActiveActivity ? 4 : 5
@@ -299,38 +334,37 @@ enum LiveActivityManager {
         data.attentionWindows(around: now)
     }
 
-    private static func relayEvents(data: ChecklistData, now: Date) -> [ScheduledEvent] {
+    private static func scheduledAttentionEvents(
+        data: ChecklistData,
+        now: Date
+    ) -> [ScheduledEvent] {
         let windows = attentionWindows(data: data, now: now)
-        let active = Activity<SavingsChecklistAttributes>.activities
-            .filter { $0.activityState == .active }
-            .max {
-                ($0.attributes.scheduledStart ?? .distantPast) <
-                ($1.attributes.scheduledStart ?? .distantPast)
-            }
-
-        let earliestAttention = windows.map(\.start).min() ?? now
-        let base: Date
-        if let active {
-            base = max(active.attributes.scheduledStart ?? now, now)
-        } else if earliestAttention <= now {
-            base = now
-        } else {
-            base = earliestAttention
-        }
-
-        // Start the successor just before the eight-hour system limit. Five pending
-        // activities provide roughly forty hours of continuous visible coverage.
-        let relayInterval: TimeInterval = 7 * 60 * 60 + 55 * 60
-        let shouldScheduleAnchor = active == nil && base > now.addingTimeInterval(30)
-        let indices = shouldScheduleAnchor ? Array(0...4) : Array(1...5)
-        return indices.compactMap { index in
-            let start = base.addingTimeInterval(relayInterval * Double(index))
-            guard start > now.addingTimeInterval(30) else { return nil }
+        let futureStarts = Set(windows.map(\.start))
+            .filter { $0 > now.addingTimeInterval(30) }
+            .sorted()
+        return futureStarts.map { start in
             return ScheduledEvent(
-                key: "relay-\(Int(start.timeIntervalSince1970))",
+                key: "attention-\(Int(start.timeIntervalSince1970))",
                 start: start
             )
         }
+    }
+
+    private static func visibleActivities() -> [Activity<SavingsChecklistAttributes>] {
+        Activity<SavingsChecklistAttributes>.activities
+            .filter { $0.activityState == .active || $0.activityState == .stale }
+    }
+
+    private static func keepOnlyLatestActiveActivity() async -> Activity<SavingsChecklistAttributes>? {
+        let activities = visibleActivities().sorted {
+            ($0.attributes.scheduledStart ?? .distantPast) >
+                ($1.attributes.scheduledStart ?? .distantPast)
+        }
+        guard let latest = activities.first else { return nil }
+        for duplicate in activities.dropFirst() {
+            await duplicate.end(nil, dismissalPolicy: .immediate)
+        }
+        return latest
     }
 
     private static func manualContentState(
