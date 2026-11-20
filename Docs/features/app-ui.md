@@ -144,7 +144,7 @@ followUpCount: 3
 
 `매월 일정`:
 
-- 출금일 Stepper 1...31
+- 입금 목표일 menu Picker 1...31
 - 알림 시간 DatePicker
 - 사전 알림 Stepper 0...14
 

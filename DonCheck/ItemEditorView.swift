@@ -43,7 +43,7 @@ struct ItemEditorView: View {
                 }
 
                 Section("매월 일정") {
-                    Picker("출금일", selection: $draft.debitDay) {
+                    Picker("입금 목표일", selection: $draft.debitDay) {
                         ForEach(1...31, id: \.self) { day in
                             Text("매월 \(day)일").tag(day)
                         }
