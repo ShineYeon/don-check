@@ -371,38 +371,10 @@ enum LiveActivityManager {
         data: ChecklistData,
         subtitle: String
     ) -> SavingsChecklistAttributes.ContentState {
-        let cycleKey = data.cycleKey(for: .now)
-        let items = data.items.compactMap { item -> LiveChecklistItem? in
-            let depositComplete = data.isStepComplete(
-                item.id,
-                cycleKey: cycleKey,
-                step: .deposit
-            )
-            let transferComplete = data.isStepComplete(
-                item.id,
-                cycleKey: cycleKey,
-                step: .automaticTransfer
-            )
-            let showsDeposit = !depositComplete
-            let showsTransfer = item.requiresAutomaticTransferConfirmation && !transferComplete
-            guard showsDeposit || showsTransfer else { return nil }
-            return LiveChecklistItem(
-                id: item.id,
-                cycleKey: cycleKey,
-                name: item.name,
-                amount: item.amount,
-                requiresAutomaticTransferConfirmation: item.requiresAutomaticTransferConfirmation,
-                showsDepositAction: showsDeposit,
-                showsAutomaticTransferAction: showsTransfer,
-                isDepositComplete: depositComplete,
-                isAutomaticTransferComplete: transferComplete
-            )
-        }
-        return SavingsChecklistAttributes.ContentState(
-            title: "이번 저축 주기",
-            subtitle: subtitle,
-            cycleKey: cycleKey,
-            items: items
+        contentState(
+            data: data,
+            windows: data.activeAttentionWindows(at: .now),
+            subtitle: subtitle
         )
     }
 

@@ -78,6 +78,7 @@ struct ContentView: View {
                     Task {
                         await store.refreshNotificationStatus()
                         await store.syncHolidayCalendarIfAuthorized()
+                        await store.rescheduleNotifications()
                     }
                 }
             }

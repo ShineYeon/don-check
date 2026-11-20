@@ -20,6 +20,7 @@ enum ModelRegressionTests {
         try testHolidayEventDateExpansion()
         try testQuietPeriodBeforeNextDepositTarget()
         try testDepositAndTransferAttentionDates()
+        try testNoPhantomPreviousCycle()
         print("Model regression tests passed")
     }
 
@@ -189,8 +190,49 @@ enum ModelRegressionTests {
         )
     }
 
+    private static func testNoPhantomPreviousCycle() throws {
+        let newlyAdded = ChecklistData(items: [
+            SavingsItem(name: "다음 목표일 대기", amount: 100, debitDay: 25,
+                        createdAt: date(2026, 10, 5))
+        ], payday: 25)
+        try expect(newlyAdded.activeAttentionWindows(at: date(2026, 10, 5), calendar: calendar).isEmpty,
+                   "10/5에 만든 항목에 9/25 일정을 소급해서 붙이면 안 됩니다.")
+        try expect(newlyAdded.activeAttentionWindows(at: date(2026, 10, 25), calendar: calendar).count == 1,
+                   "새 항목도 다음 목표일부터 정확히 한 번 표시해야 합니다.")
+        let items = [
+            SavingsItem(name: "KB손보", amount: 100, debitDay: 26,
+                        requiresAutomaticTransferConfirmation: true, automaticTransferDay: 30,
+                        createdAt: date(2026, 10, 25)),
+            SavingsItem(name: "테스트", amount: 100, debitDay: 26,
+                        createdAt: date(2026, 10, 25))
+        ]
+        var data = ChecklistData(items: items, payday: 25)
+        try expect(data.activeAttentionWindows(at: date(2026, 10, 25), calendar: calendar).isEmpty,
+                   "새 항목에 지난달 미완료를 생성하면 안 됩니다.")
+        let windows = data.activeAttentionWindows(at: date(2026, 10, 30), calendar: calendar)
+        try expect(windows.filter { $0.step == .deposit }.count == 2,
+                   "두 항목의 입금은 4개가 아니라 2개여야 합니다.")
+        try expect(windows.filter { $0.step == .automaticTransfer }.count == 1,
+                   "저축 확인을 켠 KB손보만 저축 대상이어야 합니다.")
+        data.items[1].requiresAutomaticTransferConfirmation = true
+        data.items[1].automaticTransferDay = 30
+        try expect(data.activeAttentionWindows(at: date(2026, 10, 30), calendar: calendar)
+            .filter { $0.step == .automaticTransfer }.count == 2,
+                   "둘 다 저축 확인을 켜면 저축 대상은 2개여야 합니다.")
+        data.completions = items.flatMap { item in
+            CompletionStep.allCases.map { step in
+                CompletionRecord(itemID: item.id, cycleKey: data.cycleKey(for: date(2026, 10, 30), calendar: calendar),
+                                 step: step, completedAt: date(2026, 10, 30))
+            }
+        }
+        try expect(data.activeAttentionWindows(at: date(2026, 10, 30), calendar: calendar).isEmpty,
+                   "완료 체크 뒤에는 과거 주기 항목이 되살아나면 안 됩니다.")
+    }
+
     private static func testQuietPeriodBeforeNextDepositTarget() throws {
-        let item = SavingsItem(name: "월급일 입금", amount: 100_000, debitDay: 25)
+        // Check every quiet day, including dates before the next payday boundary.
+        let item = SavingsItem(name: "월급일 입금", amount: 100_000, debitDay: 25,
+                               createdAt: date(2026, 9, 1))
         let previousCycleKey = CycleDate.key(
             for: date(2026, 10, 1),
             payday: 25,
@@ -207,10 +249,12 @@ enum ModelRegressionTests {
             payday: 25
         )
 
-        try expect(
-            data.activeAttentionWindows(at: date(2026, 10, 24, hour: 23), calendar: calendar).isEmpty,
-            "이전 주기를 완료했다면 다음 입금 목표일 전에는 알림 대상이 없어야 합니다."
-        )
+        for day in 1...24 {
+            try expect(
+                data.activeAttentionWindows(at: date(2026, 10, day, hour: 23), calendar: calendar).isEmpty,
+                "10/\(day): 이전 주기 완료 후 목표일 전까지 알림이 없어야 합니다."
+            )
+        }
         let targetDayWindows = data.activeAttentionWindows(
             at: date(2026, 10, 25),
             calendar: calendar
@@ -227,7 +271,8 @@ enum ModelRegressionTests {
             amount: 100_000,
             debitDay: 26,
             requiresAutomaticTransferConfirmation: true,
-            automaticTransferDay: 30
+            automaticTransferDay: 30,
+            createdAt: date(2026, 9, 1)
         )
         let previousCycleKey = CycleDate.key(
             for: date(2026, 10, 5),
@@ -247,10 +292,12 @@ enum ModelRegressionTests {
             payday: 25
         )
 
-        try expect(
-            data.activeAttentionWindows(at: date(2026, 10, 25, hour: 23), calendar: calendar).isEmpty,
-            "월급일이 지나도 입금 목표일 전에는 알림 대상이 없어야 합니다."
-        )
+        for day in 5...25 {
+            try expect(
+                data.activeAttentionWindows(at: date(2026, 10, day, hour: 23), calendar: calendar).isEmpty,
+                "10/\(day): 월급일과 무관하게 목표일 전에는 알림이 없어야 합니다."
+            )
+        }
         let depositDayWindows = data.activeAttentionWindows(
             at: date(2026, 10, 26),
             calendar: calendar

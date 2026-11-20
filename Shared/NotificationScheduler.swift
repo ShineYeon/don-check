@@ -68,136 +68,22 @@ enum NotificationScheduler {
         center.removePendingNotificationRequests(withIdentifiers: ownIDs)
 
         let calendar = Calendar.current
-        let currentCycleStart = CycleDate.start(
-            for: now,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
-        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
-            ?? currentCycleStart
-        let previousCycleStart = CycleDate.start(
-            for: previousReference,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
-        let nextCycleStart = CycleDate.nextBoundary(
-            after: now,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
         var candidates: [(Date, UNNotificationRequest)] = []
-
-        for item in data.items {
-            let previousKey = data.cycleKey(for: previousCycleStart, calendar: calendar)
-            let previousDue = CycleDate.dueDate(
-                for: item,
-                cycleStarting: previousCycleStart,
-                calendar: calendar
+        let currentKey = data.cycleKey(for: now, calendar: calendar)
+        for window in data.attentionWindows(around: now, calendar: calendar) {
+            guard let item = data.items.first(where: { $0.id == window.itemID }),
+                  let cycleStart = CycleDate.date(for: window.cycleKey, calendar: calendar)
+            else { continue }
+            let due = window.step == .deposit
+                ? CycleDate.dueDate(for: item, cycleStarting: cycleStart, calendar: calendar)
+                : CycleDate.automaticTransferDate(
+                    for: item, cycleStarting: cycleStart,
+                    holidays: data.holidayDateSet, calendar: calendar
+                )
+            candidates += requests(
+                for: item, due: due, cycleKey: window.cycleKey, step: window.step,
+                includeFollowUps: window.cycleKey == currentKey, now: now, calendar: calendar
             )
-            if !data.isStepComplete(item.id, cycleKey: previousKey, step: .deposit) {
-                candidates += requests(
-                    for: item,
-                    due: previousDue,
-                    cycleKey: previousKey,
-                    step: .deposit,
-                    includeFollowUps: true,
-                    now: now,
-                    calendar: calendar
-                )
-            }
-            if item.requiresAutomaticTransferConfirmation,
-               !data.isStepComplete(item.id, cycleKey: previousKey, step: .automaticTransfer) {
-                let previousTransferDue = CycleDate.automaticTransferDate(
-                    for: item,
-                    cycleStarting: previousCycleStart,
-                    holidays: data.holidayDateSet,
-                    calendar: calendar
-                )
-                candidates += requests(
-                    for: item,
-                    due: previousTransferDue,
-                    cycleKey: previousKey,
-                    step: .automaticTransfer,
-                    includeFollowUps: true,
-                    now: now,
-                    calendar: calendar
-                )
-            }
-
-            let currentKey = data.cycleKey(for: currentCycleStart, calendar: calendar)
-            let currentDue = CycleDate.dueDate(
-                for: item,
-                cycleStarting: currentCycleStart,
-                calendar: calendar
-            )
-            if !data.isStepComplete(item.id, cycleKey: currentKey, step: .deposit) {
-                candidates += requests(
-                    for: item,
-                    due: currentDue,
-                    cycleKey: currentKey,
-                    step: .deposit,
-                    includeFollowUps: true,
-                    now: now,
-                    calendar: calendar
-                )
-            }
-            if item.requiresAutomaticTransferConfirmation,
-               !data.isStepComplete(item.id, cycleKey: currentKey, step: .automaticTransfer) {
-                let currentTransferDue = CycleDate.automaticTransferDate(
-                    for: item,
-                    cycleStarting: currentCycleStart,
-                    holidays: data.holidayDateSet,
-                    calendar: calendar
-                )
-                candidates += requests(
-                    for: item,
-                    due: currentTransferDue,
-                    cycleKey: currentKey,
-                    step: .automaticTransfer,
-                    includeFollowUps: true,
-                    now: now,
-                    calendar: calendar
-                )
-            }
-
-            let nextKey = data.cycleKey(for: nextCycleStart, calendar: calendar)
-            let nextDue = CycleDate.dueDate(
-                for: item,
-                cycleStarting: nextCycleStart,
-                calendar: calendar
-            )
-            if !data.isStepComplete(item.id, cycleKey: nextKey, step: .deposit) {
-                candidates += requests(
-                    for: item,
-                    due: nextDue,
-                    cycleKey: nextKey,
-                    step: .deposit,
-                    includeFollowUps: false,
-                    now: now,
-                    calendar: calendar
-                )
-            }
-            if item.requiresAutomaticTransferConfirmation,
-               !data.isStepComplete(item.id, cycleKey: nextKey, step: .automaticTransfer) {
-                let nextTransferDue = CycleDate.automaticTransferDate(
-                    for: item,
-                    cycleStarting: nextCycleStart,
-                    holidays: data.holidayDateSet,
-                    calendar: calendar
-                )
-                candidates += requests(
-                    for: item,
-                    due: nextTransferDue,
-                    cycleKey: nextKey,
-                    step: .automaticTransfer,
-                    includeFollowUps: false,
-                    now: now,
-                    calendar: calendar
-                )
-            }
         }
 
         // iOS retains a limited number of pending local alerts. Keep the nearest ones.

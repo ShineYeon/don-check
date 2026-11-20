@@ -577,17 +577,10 @@ extension ChecklistData {
             holidays: holidayDateSet,
             calendar: calendar
         )
-        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
-            ?? currentCycleStart
-        let previousCycleStart = CycleDate.start(
-            for: previousReference,
-            payday: payday,
-            holidays: holidayDateSet,
-            calendar: calendar
-        )
         var windows: [ChecklistAttentionWindow] = []
 
-        for cycleStart in [previousCycleStart, currentCycleStart, nextCycleStart] {
+        // Match the app's current checklist; never synthesize overdue past cycles.
+        for cycleStart in [currentCycleStart, nextCycleStart] {
             let cycleKey = cycleKey(for: cycleStart, calendar: calendar)
             for item in items {
                 if !isStepComplete(item.id, cycleKey: cycleKey, step: .deposit) {
@@ -596,12 +589,14 @@ extension ChecklistData {
                         cycleStarting: cycleStart,
                         calendar: calendar
                     )
-                    windows.append(ChecklistAttentionWindow(
-                        itemID: item.id,
-                        cycleKey: cycleKey,
-                        step: .deposit,
-                        start: calendar.startOfDay(for: depositDate)
-                    ))
+                    if calendar.startOfDay(for: depositDate) >= calendar.startOfDay(for: item.createdAt) {
+                        windows.append(ChecklistAttentionWindow(
+                            itemID: item.id,
+                            cycleKey: cycleKey,
+                            step: .deposit,
+                            start: calendar.startOfDay(for: depositDate)
+                        ))
+                    }
                 }
 
                 guard item.requiresAutomaticTransferConfirmation,
@@ -616,6 +611,8 @@ extension ChecklistData {
                     holidays: holidayDateSet,
                     calendar: calendar
                 )
+                guard calendar.startOfDay(for: transferDate) >= calendar.startOfDay(for: item.createdAt)
+                else { continue }
                 windows.append(ChecklistAttentionWindow(
                     itemID: item.id,
                     cycleKey: cycleKey,
