@@ -23,7 +23,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
     var debitDay: Int
     var reminderHour: Int
     var reminderMinute: Int
-    var leadDays: Int
     var followUpCount: Int
     var createdAt: Date
 }
@@ -36,11 +35,10 @@ struct SavingsItem: Codable, Identifiable, Hashable {
 | `id` | 항목의 영구 식별자 | UUID 자동 생성 |
 | `name` | 화면과 알림 제목 | 빈 문자열 저장 불가 |
 | `amount` | 월 준비 금액, 원 단위 | 1 이상 |
-| `debitDay` | 매월 출금 예정 일자 | 1...31 |
+| `debitDay` | 매월 입금 목표일 | 1...31 |
 | `reminderHour` | 알림 시 | 0...23 |
 | `reminderMinute` | 알림 분 | 0...59 |
-| `leadDays` | 출금 전 사전 알림 일수 | 0...14 |
-| `followUpCount` | 출금 후 일별 재알림 수 | 0...7 |
+| `followUpCount` | 목표일 후 일별 재알림 수 | 0...7 |
 | `requiresAutomaticTransferConfirmation` | 저축 완료 2단계 확인 여부 | Toggle |
 | `automaticTransferDay` | 자동이체 확인 항목의 실제 매월 이체일 | 1...31 |
 | `automaticTransferUsesMonthEnd` | 숫자 대신 대상 연월의 실제 말일 사용 여부 | Boolean |
@@ -85,7 +83,7 @@ data.isComplete(item.id, cycleKey: "2026-11-25")
 
 한 주기에 완료했던 항목도 다음 월급일에는 새 키의 기록이 없으므로 미완료다. 별도 reset timer나 background task가 필요하지 않은 이유다. 위젯은 다음 월급일 경계를 timeline reload 시점으로 등록하고, 앱과 extension은 동작할 때마다 같은 계산을 수행한다.
 
-## 4. 출금일 계산
+## 4. 입금 목표일 계산
 
 `CycleDate.dueDate(for:monthContaining:)`는 해당 월의 실제 일수와 `debitDay` 중 작은 값을 사용한다.
 
@@ -112,7 +110,7 @@ data.isComplete(item.id, cycleKey: "2026-11-25")
 
 목록 row 자체를 탭하면 편집 sheet를 연다. 동일 ID를 가진 항목 index를 찾아 값을 교체한다. 완료 기록은 유지된다.
 
-출금일이나 알림 시각을 바꾸면 `persist()`가 모든 pending notification과 pending Live Activity를 새 설정으로 다시 만든다.
+입금 목표일이나 알림 시각을 바꾸면 `persist()`가 모든 pending notification과 pending Live Activity를 새 설정으로 다시 만든다.
 
 ### 삭제
 
@@ -166,10 +164,9 @@ SwiftUI list의 delete gesture가 `ChecklistStore.delete(at:)`를 호출한다. 
 - 주말과 연속 공휴일을 건너뛴 이전 영업일 월급 경계
 - 주말과 연속 공휴일을 건너뛴 다음 영업일 자동이체일
 - 월급일 변경으로 현재 cycle이 달라지는 경우
-- 출금일 당일 알림 시각 이전/이후
-- 월말 사전 알림이 이전 달로 넘어가는 경우
+- 입금 목표일 당일 알림 시각 이전/이후
 - 지난달 notification action을 이번 달에 누르는 경우
-- 완료된 항목의 출금일을 수정하는 경우
+- 완료된 항목의 입금 목표일을 수정하는 경우
 - 항목 삭제 후 widget timeline refresh
 
 ## 10. 향후 개선

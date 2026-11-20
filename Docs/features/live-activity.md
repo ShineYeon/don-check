@@ -111,14 +111,14 @@ compactLeading과 같은 `DonCheckMark`를 표시한다. 다른 Live Activity가
 
 ## 6. 자동 시작 조건
 
-`refresh`는 현재와 다음 월급 주기에 대해 두 종류의 attention window를 만든다.
+`refresh`는 이전·현재·다음 월급 주기에 대해 항목별·단계별 attention window를 만든다.
 
 ```text
-입금 window 시작 = 주말·공휴일을 이전 방향으로 보정한 실제 월급일 - 1일, 00:00
-저축 window 시작 = 주말·공휴일을 다음 방향으로 보정한 실제 자동이체일 - 1일, 00:00
+입금 window 시작 = 항목별 입금 목표일, 00:00
+저축 window 시작 = 주말·공휴일을 다음 방향으로 보정한 실제 자동이체일, 00:00
 ```
 
-입금 completion이 없으면 입금 window가, 자동이체 completion이 없으면 해당 항목의 저축 window가 유지된다. 여러 window가 동시에 열리면 가장 최근에 시작한 window의 cycle과 subtitle을 표시한다. 실제 월급일 전날 시작한 입금 window는 다음 cycle key를 미리 사용하므로 그때 체크한 상태가 월급일 이후에도 유지된다. 공휴일 캐시가 변경되면 저장 직후 모든 active/pending activity를 새 날짜로 재구성한다.
+입금 completion이 없으면 해당 항목의 입금 window가, 자동이체 completion이 없으면 해당 항목의 저축 window가 유지된다. 열린 window만 Live Activity payload에 포함하며 아직 날짜가 오지 않은 단계의 버튼은 노출하지 않는다. 각 row가 자신의 cycle key를 보유하므로 이전 주기의 미완료 단계와 현재 주기의 단계가 겹쳐도 독립적으로 완료할 수 있다. 공휴일 캐시가 변경되면 저장 직후 모든 active/pending activity를 새 날짜로 재구성한다.
 
 iOS 26 이상에서는 미래 window 시각에 scheduled Live Activity를 만들 수 있다. iOS 17~25에서는 미래 예약 API가 없지만, window가 열린 상태에서 앱이 실행되어 `refresh`가 호출되면 즉시 시작한다.
 

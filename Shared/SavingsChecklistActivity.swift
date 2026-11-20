@@ -3,38 +3,51 @@ import Foundation
 
 struct LiveChecklistItem: Codable, Hashable, Identifiable {
     var id: UUID
+    var cycleKey: String
     var name: String
     var amount: Int
     var requiresAutomaticTransferConfirmation: Bool
+    var showsDepositAction: Bool
+    var showsAutomaticTransferAction: Bool
     var isDepositComplete: Bool
     var isAutomaticTransferComplete: Bool
 
     var isComplete: Bool {
-        isDepositComplete &&
-            (!requiresAutomaticTransferConfirmation || isAutomaticTransferComplete)
+        (!showsDepositAction || isDepositComplete) &&
+            (!showsAutomaticTransferAction || isAutomaticTransferComplete)
     }
 
     init(
         id: UUID,
+        cycleKey: String = "",
         name: String,
         amount: Int,
         requiresAutomaticTransferConfirmation: Bool,
+        showsDepositAction: Bool = true,
+        showsAutomaticTransferAction: Bool? = nil,
         isDepositComplete: Bool,
         isAutomaticTransferComplete: Bool
     ) {
         self.id = id
+        self.cycleKey = cycleKey
         self.name = name
         self.amount = amount
         self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
+        self.showsDepositAction = showsDepositAction
+        self.showsAutomaticTransferAction = showsAutomaticTransferAction
+            ?? requiresAutomaticTransferConfirmation
         self.isDepositComplete = isDepositComplete
         self.isAutomaticTransferComplete = isAutomaticTransferComplete
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case cycleKey
         case name
         case amount
         case requiresAutomaticTransferConfirmation
+        case showsDepositAction
+        case showsAutomaticTransferAction
         case isDepositComplete
         case isAutomaticTransferComplete
         case isComplete
@@ -43,12 +56,21 @@ struct LiveChecklistItem: Codable, Hashable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        cycleKey = try container.decodeIfPresent(String.self, forKey: .cycleKey) ?? ""
         name = try container.decode(String.self, forKey: .name)
         amount = try container.decode(Int.self, forKey: .amount)
         requiresAutomaticTransferConfirmation = try container.decodeIfPresent(
             Bool.self,
             forKey: .requiresAutomaticTransferConfirmation
         ) ?? false
+        showsDepositAction = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsDepositAction
+        ) ?? true
+        showsAutomaticTransferAction = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsAutomaticTransferAction
+        ) ?? requiresAutomaticTransferConfirmation
         let legacyCompletion = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         isDepositComplete = try container.decodeIfPresent(
             Bool.self,
@@ -63,12 +85,15 @@ struct LiveChecklistItem: Codable, Hashable, Identifiable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encode(cycleKey, forKey: .cycleKey)
         try container.encode(name, forKey: .name)
         try container.encode(amount, forKey: .amount)
         try container.encode(
             requiresAutomaticTransferConfirmation,
             forKey: .requiresAutomaticTransferConfirmation
         )
+        try container.encode(showsDepositAction, forKey: .showsDepositAction)
+        try container.encode(showsAutomaticTransferAction, forKey: .showsAutomaticTransferAction)
         try container.encode(isDepositComplete, forKey: .isDepositComplete)
         try container.encode(isAutomaticTransferComplete, forKey: .isAutomaticTransferComplete)
     }
@@ -84,25 +109,32 @@ struct SavingsChecklistAttributes: ActivityAttributes {
         var totalCount: Int { items.count }
         var remainingCount: Int { items.filter { !$0.isComplete }.count }
         var completedCount: Int { items.filter(\.isComplete).count }
-        var depositCompletedCount: Int { items.filter(\.isDepositComplete).count }
+        var depositItemCount: Int { items.filter(\.showsDepositAction).count }
+        var depositCompletedCount: Int {
+            items.filter { $0.showsDepositAction && $0.isDepositComplete }.count
+        }
         var automaticTransferItemCount: Int {
-            items.filter(\.requiresAutomaticTransferConfirmation).count
+            items.filter(\.showsAutomaticTransferAction).count
         }
         var automaticTransferCompletedCount: Int {
             items.filter {
-                $0.requiresAutomaticTransferConfirmation && $0.isAutomaticTransferComplete
+                $0.showsAutomaticTransferAction && $0.isAutomaticTransferComplete
             }.count
         }
         var remainingAmount: Int {
-            items.filter { !$0.isDepositComplete }.reduce(0) { $0 + $1.amount }
+            items.filter { $0.showsDepositAction && !$0.isDepositComplete }
+                .reduce(0) { $0 + $1.amount }
         }
 
         var stageSummaryText: String {
-            var summary = "전체 \(totalCount)개 중 \(depositCompletedCount)개 입금 완료"
-            if automaticTransferItemCount > 0 {
-                summary += ", \(automaticTransferCompletedCount)개 저축 완료"
+            var parts: [String] = []
+            if depositItemCount > 0 {
+                parts.append("입금 \(depositCompletedCount)/\(depositItemCount)")
             }
-            return summary
+            if automaticTransferItemCount > 0 {
+                parts.append("저축 \(automaticTransferCompletedCount)/\(automaticTransferItemCount)")
+            }
+            return parts.joined(separator: ", ")
         }
     }
 
@@ -130,7 +162,7 @@ enum LiveActivityError: LocalizedError {
 enum LiveActivityManager {
     static func startNow(_ data: ChecklistData, subtitle: String = "완료할 항목을 체크하세요") async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw LiveActivityError.disabled }
-        let state = contentState(data: data, cycleKey: data.cycleKey(for: .now), subtitle: subtitle)
+        let state = manualContentState(data: data, subtitle: subtitle)
         guard state.remainingCount > 0 else { throw LiveActivityError.noIncompleteItems }
 
         let todayKey = dayKey(for: .now)
@@ -154,19 +186,19 @@ enum LiveActivityManager {
     }
 
     static func refresh(_ data: ChecklistData, now: Date = .now) async {
-        let activeWindow = attentionWindow(data: data, at: now)
+        let activeWindows = activeAttentionWindows(data: data, at: now)
 
         var hasActiveActivity = false
         for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .active {
-            guard let activeWindow else {
+            guard !activeWindows.isEmpty else {
                 await activity.end(nil, dismissalPolicy: .immediate)
                 continue
             }
             hasActiveActivity = true
             let state = contentState(
                 data: data,
-                cycleKey: activeWindow.cycleKey,
-                subtitle: activeWindow.subtitle
+                windows: activeWindows,
+                subtitle: subtitle(for: activeWindows)
             )
             await activity.update(ActivityContent(state: state, staleDate: staleDate(from: now)))
         }
@@ -181,7 +213,7 @@ enum LiveActivityManager {
             return
         }
 
-        if !hasActiveActivity, let activeWindow {
+        if !hasActiveActivity, !activeWindows.isEmpty {
             do {
                 if #available(iOS 26.0, *) {
                     for activity in Activity<SavingsChecklistAttributes>.activities where activity.activityState == .pending {
@@ -190,8 +222,8 @@ enum LiveActivityManager {
                 }
                 let state = contentState(
                     data: data,
-                    cycleKey: activeWindow.cycleKey,
-                    subtitle: activeWindow.subtitle
+                    windows: activeWindows,
+                    subtitle: subtitle(for: activeWindows)
                 )
                 let attributes = SavingsChecklistAttributes(
                     eventKey: dayKey(for: now),
@@ -218,15 +250,18 @@ enum LiveActivityManager {
         // an activity is visible so an explicit start can never be crowded out.
         let pendingLimit = hasActiveActivity ? 4 : 5
         for event in events.prefix(pendingLimit) {
-            let eventState = contentState(data: data, cycleKey: event.cycleKey, subtitle: event.subtitle)
+            let eventWindows = activeAttentionWindows(data: data, at: event.start)
+            guard !eventWindows.isEmpty else { continue }
+            let eventSubtitle = subtitle(for: eventWindows)
+            let eventState = contentState(data: data, windows: eventWindows, subtitle: eventSubtitle)
             guard eventState.remainingCount > 0 else { continue }
             let attributes = SavingsChecklistAttributes(eventKey: event.key, scheduledStart: event.start)
             let content = ActivityContent(state: eventState, staleDate: staleDate(from: event.start))
             let alert = AlertConfiguration(
                 title: "저축 체크리스트",
-                body: event.subtitle.hasPrefix("자동이체")
+                body: eventSubtitle.hasPrefix("자동이체")
                     ? "자동이체가 완료됐는지 확인하세요."
-                    : "완료하지 않은 입금 항목을 확인하세요.",
+                    : "오늘 입금 목표를 확인하세요.",
                 sound: .default
             )
             _ = try? Activity.request(
@@ -242,21 +277,24 @@ enum LiveActivityManager {
 
     private struct ScheduledEvent {
         let key: String
-        let cycleKey: String
         let start: Date
-        let subtitle: String
     }
 
     private struct AttentionWindow {
+        let itemID: UUID
         let cycleKey: String
+        let step: CompletionStep
         let start: Date
-        let subtitle: String
     }
 
-    private static func attentionWindow(data: ChecklistData, at date: Date) -> AttentionWindow? {
+    private struct WindowItemKey: Hashable {
+        let itemID: UUID
+        let cycleKey: String
+    }
+
+    private static func activeAttentionWindows(data: ChecklistData, at date: Date) -> [AttentionWindow] {
         attentionWindows(data: data, now: date)
             .filter { $0.start <= date }
-            .max { $0.start < $1.start }
     }
 
     private static func attentionWindows(data: ChecklistData, now: Date) -> [AttentionWindow] {
@@ -273,39 +311,50 @@ enum LiveActivityManager {
             holidays: data.holidayDateSet,
             calendar: calendar
         )
+        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
+            ?? currentCycleStart
+        let previousCycleStart = CycleDate.start(
+            for: previousReference,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
         var windows: [AttentionWindow] = []
 
-        for cycleStart in [currentCycleStart, nextCycleStart] {
+        for cycleStart in [previousCycleStart, currentCycleStart, nextCycleStart] {
             let cycleKey = data.cycleKey(for: cycleStart, calendar: calendar)
-            let hasIncompleteDeposit = data.items.contains {
-                !data.isStepComplete($0.id, cycleKey: cycleKey, step: .deposit)
-            }
-            if hasIncompleteDeposit {
-                let start = calendar.date(byAdding: .day, value: -1, to: cycleStart) ?? cycleStart
-                windows.append(AttentionWindow(
-                    cycleKey: cycleKey,
-                    start: calendar.startOfDay(for: start),
-                    subtitle: "입금 준비 · 완료할 때까지 표시해요"
-                ))
-            }
+            for item in data.items {
+                if !data.isStepComplete(item.id, cycleKey: cycleKey, step: .deposit) {
+                    let depositDate = CycleDate.dueDate(
+                        for: item,
+                        cycleStarting: cycleStart,
+                        calendar: calendar
+                    )
+                    windows.append(AttentionWindow(
+                        itemID: item.id,
+                        cycleKey: cycleKey,
+                        step: .deposit,
+                        start: calendar.startOfDay(for: depositDate)
+                    ))
+                }
 
-            for item in data.items where item.requiresAutomaticTransferConfirmation {
-                guard !data.isStepComplete(
-                    item.id,
-                    cycleKey: cycleKey,
-                    step: .automaticTransfer
-                ) else { continue }
+                guard item.requiresAutomaticTransferConfirmation,
+                      !data.isStepComplete(
+                        item.id,
+                        cycleKey: cycleKey,
+                        step: .automaticTransfer
+                      ) else { continue }
                 let transferDate = CycleDate.automaticTransferDate(
                     for: item,
                     cycleStarting: cycleStart,
                     holidays: data.holidayDateSet,
                     calendar: calendar
                 )
-                let previousDay = calendar.date(byAdding: .day, value: -1, to: transferDate) ?? transferDate
                 windows.append(AttentionWindow(
+                    itemID: item.id,
                     cycleKey: cycleKey,
-                    start: calendar.startOfDay(for: previousDay),
-                    subtitle: "자동이체 확인 · 저축 완료까지 표시해요"
+                    step: .automaticTransfer,
+                    start: calendar.startOfDay(for: transferDate)
                 ))
             }
         }
@@ -339,33 +388,42 @@ enum LiveActivityManager {
         return indices.compactMap { index in
             let start = base.addingTimeInterval(relayInterval * Double(index))
             guard start > now.addingTimeInterval(30) else { return nil }
-            let eventWindow = windows
-                .filter { $0.start <= start }
-                .max { $0.start < $1.start }
-                ?? windows.min { $0.start < $1.start }
-            guard let eventWindow else { return nil }
             return ScheduledEvent(
                 key: "relay-\(Int(start.timeIntervalSince1970))",
-                cycleKey: eventWindow.cycleKey,
-                start: start,
-                subtitle: eventWindow.subtitle
+                start: start
             )
         }
     }
 
-    private static func contentState(data: ChecklistData, cycleKey: String, subtitle: String) -> SavingsChecklistAttributes.ContentState {
-        let items = data.items.map {
-            LiveChecklistItem(
-                id: $0.id,
-                name: $0.name,
-                amount: $0.amount,
-                requiresAutomaticTransferConfirmation: $0.requiresAutomaticTransferConfirmation,
-                isDepositComplete: data.isStepComplete($0.id, cycleKey: cycleKey, step: .deposit),
-                isAutomaticTransferComplete: data.isStepComplete(
-                    $0.id,
-                    cycleKey: cycleKey,
-                    step: .automaticTransfer
-                )
+    private static func manualContentState(
+        data: ChecklistData,
+        subtitle: String
+    ) -> SavingsChecklistAttributes.ContentState {
+        let cycleKey = data.cycleKey(for: .now)
+        let items = data.items.compactMap { item -> LiveChecklistItem? in
+            let depositComplete = data.isStepComplete(
+                item.id,
+                cycleKey: cycleKey,
+                step: .deposit
+            )
+            let transferComplete = data.isStepComplete(
+                item.id,
+                cycleKey: cycleKey,
+                step: .automaticTransfer
+            )
+            let showsDeposit = !depositComplete
+            let showsTransfer = item.requiresAutomaticTransferConfirmation && !transferComplete
+            guard showsDeposit || showsTransfer else { return nil }
+            return LiveChecklistItem(
+                id: item.id,
+                cycleKey: cycleKey,
+                name: item.name,
+                amount: item.amount,
+                requiresAutomaticTransferConfirmation: item.requiresAutomaticTransferConfirmation,
+                showsDepositAction: showsDeposit,
+                showsAutomaticTransferAction: showsTransfer,
+                isDepositComplete: depositComplete,
+                isAutomaticTransferComplete: transferComplete
             )
         }
         return SavingsChecklistAttributes.ContentState(
@@ -374,6 +432,66 @@ enum LiveActivityManager {
             cycleKey: cycleKey,
             items: items
         )
+    }
+
+    private static func contentState(
+        data: ChecklistData,
+        windows: [AttentionWindow],
+        subtitle: String
+    ) -> SavingsChecklistAttributes.ContentState {
+        let grouped = Dictionary(grouping: windows) {
+            WindowItemKey(itemID: $0.itemID, cycleKey: $0.cycleKey)
+        }
+        let orderedGroups = grouped.sorted { lhs, rhs in
+            let lhsStart = lhs.value.map(\.start).min() ?? .distantFuture
+            let rhsStart = rhs.value.map(\.start).min() ?? .distantFuture
+            if lhsStart != rhsStart { return lhsStart < rhsStart }
+            let lhsIndex = data.items.firstIndex { $0.id == lhs.key.itemID } ?? .max
+            let rhsIndex = data.items.firstIndex { $0.id == rhs.key.itemID } ?? .max
+            return lhsIndex < rhsIndex
+        }
+        let items = orderedGroups.compactMap { key, itemWindows -> LiveChecklistItem? in
+            guard let item = data.items.first(where: { $0.id == key.itemID }) else { return nil }
+            let steps = Set(itemWindows.map(\.step))
+            return LiveChecklistItem(
+                id: item.id,
+                cycleKey: key.cycleKey,
+                name: item.name,
+                amount: item.amount,
+                requiresAutomaticTransferConfirmation: item.requiresAutomaticTransferConfirmation,
+                showsDepositAction: steps.contains(.deposit),
+                showsAutomaticTransferAction: steps.contains(.automaticTransfer),
+                isDepositComplete: data.isStepComplete(
+                    item.id,
+                    cycleKey: key.cycleKey,
+                    step: .deposit
+                ),
+                isAutomaticTransferComplete: data.isStepComplete(
+                    item.id,
+                    cycleKey: key.cycleKey,
+                    step: .automaticTransfer
+                )
+            )
+        }
+        let fallbackCycleKey = windows.max { $0.start < $1.start }?.cycleKey
+            ?? data.cycleKey(for: .now)
+        return SavingsChecklistAttributes.ContentState(
+            title: "확인할 저축 일정",
+            subtitle: subtitle,
+            cycleKey: fallbackCycleKey,
+            items: items
+        )
+    }
+
+    private static func subtitle(for windows: [AttentionWindow]) -> String {
+        let steps = Set(windows.map(\.step))
+        if steps == Set(CompletionStep.allCases) {
+            return "입금·자동이체 확인 · 체크할 때까지 표시해요"
+        }
+        if steps.contains(.automaticTransfer) {
+            return "자동이체 확인 · 체크할 때까지 표시해요"
+        }
+        return "입금 목표 확인 · 체크할 때까지 표시해요"
     }
 
     private static func dayKey(for date: Date, calendar: Calendar = .current) -> String {

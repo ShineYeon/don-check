@@ -229,19 +229,29 @@ final class ChecklistStore: ObservableObject {
     }
 
     func toggle(_ item: SavingsItem, step: CompletionStep) {
-        let next = !isStepComplete(item, step: step)
+        let targetCycleKey = cycleKey
+        let next = !data.isStepComplete(item.id, cycleKey: targetCycleKey, step: step)
         data.completions.removeAll {
-            $0.itemID == item.id && $0.cycleKey == cycleKey && $0.step == step
+            $0.itemID == item.id && $0.cycleKey == targetCycleKey && $0.step == step
         }
         if next {
             data.completions.append(CompletionRecord(
                 itemID: item.id,
-                cycleKey: cycleKey,
+                cycleKey: targetCycleKey,
                 step: step,
                 completedAt: .now
             ))
         }
         persist()
+        if next {
+            Task {
+                await NotificationScheduler.cancel(
+                    itemID: item.id,
+                    cycleKey: targetCycleKey,
+                    step: step
+                )
+            }
+        }
     }
 
     func requestNotifications() async {

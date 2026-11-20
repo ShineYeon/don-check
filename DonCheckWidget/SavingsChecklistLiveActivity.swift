@@ -23,7 +23,7 @@ struct SavingsChecklistLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 7) {
                         ForEach(Array(context.state.items.filter { !$0.isComplete }.prefix(3))) { item in
-                            ChecklistActivityRow(item: item, cycleKey: context.state.cycleKey)
+                            ChecklistActivityRow(item: item, fallbackCycleKey: context.state.cycleKey)
                         }
                     }
                 }
@@ -56,8 +56,10 @@ private struct LockScreenChecklistView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("입금 \(state.depositCompletedCount)/\(state.totalCount)")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                    if state.depositItemCount > 0 {
+                        Text("입금 \(state.depositCompletedCount)/\(state.depositItemCount)")
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                    }
                     if state.automaticTransferItemCount > 0 {
                         Text("저축 \(state.automaticTransferCompletedCount)/\(state.automaticTransferItemCount)")
                             .font(.caption.weight(.semibold).monospacedDigit())
@@ -69,7 +71,7 @@ private struct LockScreenChecklistView: View {
             }
 
             ForEach(Array(state.items.prefix(4))) { item in
-                ChecklistActivityRow(item: item, cycleKey: state.cycleKey)
+                ChecklistActivityRow(item: item, fallbackCycleKey: state.cycleKey)
             }
 
             if state.items.count > 4 {
@@ -106,11 +108,13 @@ private struct CompactStageSummary: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 3) {
                 CompactMetric(symbol: "list.bullet", value: state.totalCount, color: .primary)
-                CompactMetric(
-                    symbol: "tray.and.arrow.down.fill",
-                    value: state.depositCompletedCount,
-                    color: .mint
-                )
+                if state.depositItemCount > 0 {
+                    CompactMetric(
+                        symbol: "tray.and.arrow.down.fill",
+                        value: state.depositCompletedCount,
+                        color: .mint
+                    )
+                }
                 if state.automaticTransferItemCount > 0 {
                     CompactMetric(
                         symbol: "banknote.fill",
@@ -130,10 +134,13 @@ private struct CompactStageSummary: View {
     }
 
     private var compactFallback: String {
-        if state.automaticTransferItemCount > 0 {
+        if state.depositItemCount > 0, state.automaticTransferItemCount > 0 {
             return "\(state.totalCount)·\(state.depositCompletedCount)·\(state.automaticTransferCompletedCount)"
         }
-        return "\(state.totalCount)·\(state.depositCompletedCount)"
+        if state.depositItemCount > 0 {
+            return "\(state.totalCount)·\(state.depositCompletedCount)"
+        }
+        return "\(state.totalCount)·\(state.automaticTransferCompletedCount)"
     }
 }
 
@@ -160,8 +167,10 @@ private struct ExpandedStageSummary: View {
         VStack(alignment: .trailing, spacing: 2) {
             Text("전체 \(state.totalCount)개")
                 .font(.caption.weight(.semibold).monospacedDigit())
-            Text("입금 \(state.depositCompletedCount)개")
-                .foregroundStyle(.mint)
+            if state.depositItemCount > 0 {
+                Text("입금 \(state.depositCompletedCount)개")
+                    .foregroundStyle(.mint)
+            }
             if state.automaticTransferItemCount > 0 {
                 Text("저축 \(state.automaticTransferCompletedCount)개")
                     .foregroundStyle(.orange)
@@ -175,7 +184,11 @@ private struct ExpandedStageSummary: View {
 
 private struct ChecklistActivityRow: View {
     let item: LiveChecklistItem
-    let cycleKey: String
+    let fallbackCycleKey: String
+
+    private var cycleKey: String {
+        item.cycleKey.isEmpty ? fallbackCycleKey : item.cycleKey
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -183,14 +196,16 @@ private struct ChecklistActivityRow: View {
                 .lineLimit(1)
                 .strikethrough(item.isComplete)
             Spacer(minLength: 4)
-            ActivityStepButton(
-                title: "입금",
-                itemID: item.id,
-                cycleKey: cycleKey,
-                step: .deposit,
-                isComplete: item.isDepositComplete
-            )
-            if item.requiresAutomaticTransferConfirmation {
+            if item.showsDepositAction {
+                ActivityStepButton(
+                    title: "입금",
+                    itemID: item.id,
+                    cycleKey: cycleKey,
+                    step: .deposit,
+                    isComplete: item.isDepositComplete
+                )
+            }
+            if item.showsAutomaticTransferAction {
                 ActivityStepButton(
                     title: "저축",
                     itemID: item.id,

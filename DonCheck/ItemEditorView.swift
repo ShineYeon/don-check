@@ -36,7 +36,7 @@ struct ItemEditorView: View {
                         .pickerStyle(.menu)
                     }
                     Text(draft.requiresAutomaticTransferConfirmation
-                         ? "주말·공휴일을 보정한 실제 자동이체일 하루 전부터 저축 완료 확인이 잠금화면과 Dynamic Island에 표시됩니다."
+                         ? "주말·공휴일을 보정한 실제 자동이체일부터 저축 완료 확인이 잠금화면과 Dynamic Island에 표시됩니다."
                          : "입금 완료만 체크하면 이 항목이 완료됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -53,11 +53,6 @@ struct ItemEditorView: View {
                         "알림 시간",
                         selection: reminderTime,
                         displayedComponents: .hourAndMinute
-                    )
-                    Stepper(
-                        draft.leadDays == 0 ? "사전 알림 없음" : "\(draft.leadDays)일 전에도 알림",
-                        value: $draft.leadDays,
-                        in: 0...14
                     )
                 }
 

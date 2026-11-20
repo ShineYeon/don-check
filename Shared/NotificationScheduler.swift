@@ -68,6 +68,14 @@ enum NotificationScheduler {
             holidays: data.holidayDateSet,
             calendar: calendar
         )
+        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
+            ?? currentCycleStart
+        let previousCycleStart = CycleDate.start(
+            for: previousReference,
+            payday: data.payday,
+            holidays: data.holidayDateSet,
+            calendar: calendar
+        )
         let nextCycleStart = CycleDate.nextBoundary(
             after: now,
             payday: data.payday,
@@ -77,18 +85,53 @@ enum NotificationScheduler {
         var candidates: [(Date, UNNotificationRequest)] = []
 
         for item in data.items {
+            let previousKey = data.cycleKey(for: previousCycleStart, calendar: calendar)
+            let previousDue = CycleDate.dueDate(
+                for: item,
+                cycleStarting: previousCycleStart,
+                calendar: calendar
+            )
+            if !data.isStepComplete(item.id, cycleKey: previousKey, step: .deposit) {
+                candidates += requests(
+                    for: item,
+                    due: previousDue,
+                    cycleKey: previousKey,
+                    step: .deposit,
+                    includeFollowUps: true,
+                    now: now,
+                    calendar: calendar
+                )
+            }
+            if item.requiresAutomaticTransferConfirmation,
+               !data.isStepComplete(item.id, cycleKey: previousKey, step: .automaticTransfer) {
+                let previousTransferDue = CycleDate.automaticTransferDate(
+                    for: item,
+                    cycleStarting: previousCycleStart,
+                    holidays: data.holidayDateSet,
+                    calendar: calendar
+                )
+                candidates += requests(
+                    for: item,
+                    due: previousTransferDue,
+                    cycleKey: previousKey,
+                    step: .automaticTransfer,
+                    includeFollowUps: true,
+                    now: now,
+                    calendar: calendar
+                )
+            }
+
+            let currentKey = data.cycleKey(for: currentCycleStart, calendar: calendar)
             let currentDue = CycleDate.dueDate(
                 for: item,
                 cycleStarting: currentCycleStart,
                 calendar: calendar
             )
-            let currentKey = data.cycleKey(for: currentDue, calendar: calendar)
             if !data.isStepComplete(item.id, cycleKey: currentKey, step: .deposit) {
                 candidates += requests(
                     for: item,
                     due: currentDue,
-                    payday: data.payday,
-                    holidays: data.holidayDateSet,
+                    cycleKey: currentKey,
                     step: .deposit,
                     includeFollowUps: true,
                     now: now,
@@ -106,8 +149,7 @@ enum NotificationScheduler {
                 candidates += requests(
                     for: item,
                     due: currentTransferDue,
-                    payday: data.payday,
-                    holidays: data.holidayDateSet,
+                    cycleKey: currentKey,
                     step: .automaticTransfer,
                     includeFollowUps: true,
                     now: now,
@@ -115,18 +157,17 @@ enum NotificationScheduler {
                 )
             }
 
+            let nextKey = data.cycleKey(for: nextCycleStart, calendar: calendar)
             let nextDue = CycleDate.dueDate(
                 for: item,
                 cycleStarting: nextCycleStart,
                 calendar: calendar
             )
-            let nextKey = data.cycleKey(for: nextDue, calendar: calendar)
             if !data.isStepComplete(item.id, cycleKey: nextKey, step: .deposit) {
                 candidates += requests(
                     for: item,
                     due: nextDue,
-                    payday: data.payday,
-                    holidays: data.holidayDateSet,
+                    cycleKey: nextKey,
                     step: .deposit,
                     includeFollowUps: false,
                     now: now,
@@ -144,8 +185,7 @@ enum NotificationScheduler {
                 candidates += requests(
                     for: item,
                     due: nextTransferDue,
-                    payday: data.payday,
-                    holidays: data.holidayDateSet,
+                    cycleKey: nextKey,
                     step: .automaticTransfer,
                     includeFollowUps: false,
                     now: now,
@@ -199,28 +239,16 @@ enum NotificationScheduler {
     private static func requests(
         for item: SavingsItem,
         due: Date,
-        payday: Int,
-        holidays: Set<String>,
+        cycleKey: String,
         step: CompletionStep,
         includeFollowUps: Bool,
         now: Date,
         calendar: Calendar
     ) -> [(Date, UNNotificationRequest)] {
-        let key = CycleDate.key(
-            for: due,
-            payday: payday,
-            holidays: holidays,
-            calendar: calendar
-        )
         var dates: [(String, Date, String)] = []
 
-        if step == .deposit,
-           item.leadDays > 0,
-           let early = calendar.date(byAdding: .day, value: -item.leadDays, to: due) {
-            dates.append(("early", early, "출금 전에 입금할 때예요"))
-        }
         let dueBody = step == .deposit
-            ? "자동이체 계좌의 입금을 확인하세요"
+            ? "오늘 입금 목표를 확인하세요"
             : "자동이체가 완료됐는지 확인하세요"
         dates.append(("due", due, dueBody))
 
@@ -245,17 +273,17 @@ enum NotificationScheduler {
                 ? depositCategory
                 : automaticTransferCategory
             content.threadIdentifier = item.id.uuidString
-            content.interruptionLevel = kind == "early" ? .active : .timeSensitive
+            content.interruptionLevel = .timeSensitive
             content.userInfo = [
                 "itemID": item.id.uuidString,
-                "cycleKey": key,
+                "cycleKey": cycleKey,
                 "step": step.rawValue
             ]
 
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(
-                identifier: identifierPrefix(itemID: item.id, cycleKey: key, step: step) + kind,
+                identifier: identifierPrefix(itemID: item.id, cycleKey: cycleKey, step: step) + kind,
                 content: content,
                 trigger: trigger
             )

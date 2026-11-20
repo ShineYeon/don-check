@@ -19,7 +19,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Text("월급일 00:00부터 새 저축 주기가 시작됩니다. 월급일이 토·일요일 또는 동기화한 공휴일이면 직전 영업일을 사용하고, 29~31일이 없는 달에는 그 달의 마지막 날을 사용합니다. 입금 체크리스트는 실제 월급일 하루 전부터 표시됩니다.")
+                    Text("월급일 00:00부터 새 저축 주기가 시작됩니다. 월급일이 토·일요일 또는 동기화한 공휴일이면 직전 영업일을 사용하고, 29~31일이 없는 달에는 그 달의 마지막 날을 사용합니다. 입금 확인은 항목별 입금 목표일부터 표시됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -54,7 +54,7 @@ struct SettingsView: View {
                     }
                     .disabled(store.data.items.isEmpty || store.completedCount == store.data.items.count)
 
-                    Text("일반 알림과 별도로 잠금화면과 Dynamic Island에 표시됩니다. iOS 26 이상에서는 실제 월급일과 자동이체일 하루 전부터 자동 시작됩니다.")
+                    Text("일반 알림과 별도로 잠금화면과 Dynamic Island에 표시됩니다. iOS 26 이상에서는 각 항목의 입금 목표일과 실제 자동이체일부터 자동 시작됩니다.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

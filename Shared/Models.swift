@@ -21,7 +21,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
     var debitDay: Int
     var reminderHour: Int
     var reminderMinute: Int
-    var leadDays: Int
     var followUpCount: Int
     var requiresAutomaticTransferConfirmation: Bool
     var automaticTransferDay: Int
@@ -35,7 +34,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         debitDay: Int,
         reminderHour: Int = 8,
         reminderMinute: Int = 0,
-        leadDays: Int = 1,
         followUpCount: Int = 3,
         requiresAutomaticTransferConfirmation: Bool = false,
         automaticTransferDay: Int? = nil,
@@ -48,7 +46,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         self.debitDay = debitDay
         self.reminderHour = reminderHour
         self.reminderMinute = reminderMinute
-        self.leadDays = leadDays
         self.followUpCount = followUpCount
         self.requiresAutomaticTransferConfirmation = requiresAutomaticTransferConfirmation
         self.automaticTransferDay = min(max(automaticTransferDay ?? debitDay, 1), 31)
@@ -82,7 +79,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         case debitDay
         case reminderHour
         case reminderMinute
-        case leadDays
         case followUpCount
         case requiresAutomaticTransferConfirmation
         case automaticTransferDay
@@ -98,7 +94,6 @@ struct SavingsItem: Codable, Identifiable, Hashable {
         debitDay = try container.decode(Int.self, forKey: .debitDay)
         reminderHour = try container.decode(Int.self, forKey: .reminderHour)
         reminderMinute = try container.decode(Int.self, forKey: .reminderMinute)
-        leadDays = try container.decode(Int.self, forKey: .leadDays)
         followUpCount = try container.decode(Int.self, forKey: .followUpCount)
         requiresAutomaticTransferConfirmation = try container.decodeIfPresent(
             Bool.self,

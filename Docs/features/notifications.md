@@ -24,7 +24,7 @@ DonCheck의 일반 알림은 `UserNotifications` framework로 기기 내부에�
 
 ### Time Sensitive
 
-출금일과 재알림 content는 `.timeSensitive` interruption level을 사용한다. 별도의 authorization option이 아니라 notification content 속성이다. 사용자는 iOS 설정에서 해당 앱의 time-sensitive notification을 끌 수 있으므로 전달 우선순위를 보장할 수 없다.
+입금 목표일·자동이체일과 재알림 content는 `.timeSensitive` interruption level을 사용한다. 별도의 authorization option이 아니라 notification content 속성이다. 사용자는 iOS 설정에서 해당 앱의 time-sensitive notification을 끌 수 있으므로 전달 우선순위를 보장할 수 없다.
 
 ## 3. 식별자
 
@@ -55,7 +55,6 @@ doncheck.<itemUUID>.<cycleKey>.<step>.<kind>
 예:
 
 ```text
-doncheck.6C96...A21.2026-11-25.deposit.early
 doncheck.6C96...A21.2026-11-25.deposit.due
 doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 ```
@@ -64,20 +63,13 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 
 ## 4. 알림 종류
 
-### 4.1 사전 알림
+### 4.1 입금 확인 알림
 
-- 조건: `leadDays > 0`
-- 시각: 출금일 기준 `leadDays`일 전, 항목의 reminder hour/minute
-- 문구: `출금 전에 입금할 때예요`
-- interruption level: `.active`
-
-### 4.2 입금 확인 알림
-
-- 조건: 현재 시각보다 미래인 출금일 시각
-- 문구: `자동이체 계좌의 입금을 확인하세요`
+- 조건: 현재 시각보다 미래인 항목별 입금 목표일 시각
+- 문구: `오늘 입금 목표를 확인하세요`
 - interruption level: `.timeSensitive`
 
-### 4.3 저축 완료 확인 알림
+### 4.2 저축 완료 확인 알림
 
 - 조건: `requiresAutomaticTransferConfirmation == true`
 - 시각: 항목별 숫자 또는 실제 말일 자동이체일을 계산하고 주말·공휴일이면 다음 영업일로 보정한 날짜의 reminder hour/minute
@@ -85,14 +77,14 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 - action: `저축 완료`
 - interruption level: `.timeSensitive`
 
-### 4.4 재알림
+### 4.3 재알림
 
 - 조건: 알림 대상 월급 주기의 항목이 미완료이며 `followUpCount > 0`
-- 시각: 입금 단계는 출금일, 저축 단계는 실제 자동이체일 이후 1일부터 `followUpCount`일까지 같은 시각
+- 시각: 입금 단계는 입금 목표일, 저축 단계는 실제 자동이체일 이후 1일부터 `followUpCount`일까지 같은 시각
 - 문구: 단계에 따라 입금 미완료 또는 저축 완료 미확인 안내
 - interruption level: `.timeSensitive`
 
-다음 월급 주기의 출금 건에 대해서는 사전 알림과 출금일 알림만 미리 만든다. 다음 주기의 재알림은 그 주기가 현재 주기가 되어 다시 schedule될 때 생성한다.
+다음 월급 주기의 목표일 알림은 미리 만들고, 재알림은 그 주기가 현재 주기가 되어 다시 schedule될 때 생성한다.
 
 ## 5. 전체 재예약 알고리즘
 
@@ -100,8 +92,8 @@ doncheck.6C96...A21.2026-11-25.automaticTransfer.due
 
 1. 시스템에서 pending notification request를 조회한다.
 2. identifier가 `doncheck.`로 시작하는 request를 제거한다.
-3. 현재 월급 주기 안에서 실제 월급일은 이전 영업일, 실제 자동이체일은 다음 영업일로 계산하고 미완료 단계별 early/due/follow-up 후보를 생성한다.
-4. 다음 월급 주기 안에서 같은 단계별 early/due 후보를 생성한다.
+3. 이전·현재 월급 주기의 항목별 입금 목표일과 영업일 보정된 실제 자동이체일을 계산하고 미완료 단계별 due/follow-up 후보를 생성한다.
+4. 다음 월급 주기 안에서 같은 단계별 due 후보를 생성한다.
 5. 이미 지난 후보를 제거한다.
 6. 날짜 오름차순으로 정렬한다.
 7. 가장 가까운 60개를 시스템에 등록한다.
@@ -175,9 +167,8 @@ request는 year/month/day/hour/minute DateComponents로 등록된다. 앱이 다
 
 - 알림 최초 권한 요청
 - 권한 거부 후 설정 앱 이동
-- 사전 알림 0일/1일/14일
 - 재알림 0일/7일
-- 출금일이 지난 상태에서 앱 시작
+- 입금 목표일이 지난 상태에서 앱 시작
 - 완료 직후 pending request 제거
 - 완료 취소 후 미래 알림 복구
 - notification action으로 완료

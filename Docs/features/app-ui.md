@@ -89,7 +89,7 @@ prune history
 
 - 완료 circle/checkmark
 - 항목 이름
-- 매월 출금일과 알림 시각
+- 매월 입금 목표일과 알림 시각
 - 금액
 
 완료된 항목은 이름에 strikethrough를 적용하고 secondary color로 표시한다.
@@ -120,7 +120,6 @@ amount: 0
 debitDay: 1
 reminderHour: 8
 reminderMinute: 0
-leadDays: 1
 followUpCount: 3
 ```
 
@@ -146,7 +145,6 @@ followUpCount: 3
 
 - 입금 목표일 menu Picker 1...31
 - 알림 시간 DatePicker
-- 사전 알림 Stepper 0...14
 
 `완료하지 않았을 때`:
 

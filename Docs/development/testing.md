@@ -63,14 +63,13 @@ git diff --check
 - 정상 이름/금액 저장
 - 빈 이름 저장 버튼 비활성화
 - 금액 0 이하 저장 버튼 비활성화
-- 출금일 1과 31 경계
-- 사전 알림 0과 14 경계
+- 입금 목표일 1과 31 경계
 - 재알림 0과 7 경계
 
 ### 수정
 
 - 이름과 금액 반영
-- 출금일 변경 후 알림 재예약
+- 입금 목표일 변경 후 알림 재예약
 - 완료된 항목 수정 시 완료 상태 유지
 
 ### 삭제
@@ -116,7 +115,6 @@ git diff --check
 | 기존 v4 숫자 자동이체 payload | 숫자 유지, 말일 옵션 false, v5 저장 |
 | 공휴일 캐시가 없는 기존 payload | decode 성공 및 주말만 보정 |
 | 공휴일 재동기화로 cycle 경계 변경 | completion이 새 cycle key로 매핑되어 체크 유지 |
-| 월말 사전 알림 | 이전 달 날짜로 예약 |
 | 다른 시간대로 이동 | 다음 재예약에서 현지 calendar 적용 |
 
 자동화 시 `Calendar`와 `now`를 주입하고 고정 timezone을 사용해야 재현 가능한 테스트가 된다.
@@ -165,10 +163,10 @@ let requests = await UNUserNotificationCenter.current().pendingNotificationReque
 - 미완료 항목이 없을 때 사용자 오류
 - Live Activity 비활성화 상태 오류
 - 이미 active일 때 중복 생성 없이 update
-- 실제 월급일 하루 전 입금 window 시작
-- 영업일 보정된 실제 자동이체일 하루 전 저축 window 시작
+- 항목별 입금 목표일 00:00에 입금 window 시작
+- 영업일 보정된 실제 자동이체일 00:00에 저축 window 시작
 - 입금/저축 완료 후 해당 window 종료 또는 다음 window 전환
-- 월급일 전날 next cycle key로 입금 체크 유지
+- 이전·현재 주기 window가 겹쳐도 row별 cycle key로 독립 완료
 
 ### UI
 

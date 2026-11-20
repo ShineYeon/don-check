@@ -37,7 +37,6 @@ struct ChecklistData: Codable {
       "debitDay": 2,
       "reminderHour": 8,
       "reminderMinute": 0,
-      "leadDays": 1,
       "followUpCount": 3,
       "requiresAutomaticTransferConfirmation": true,
       "automaticTransferDay": 10,
