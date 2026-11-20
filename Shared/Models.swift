@@ -145,6 +145,13 @@ struct CompletionRecord: Codable, Hashable {
     }
 }
 
+struct ChecklistAttentionWindow: Hashable {
+    var itemID: UUID
+    var cycleKey: String
+    var step: CompletionStep
+    var start: Date
+}
+
 struct ChecklistData: Codable {
     var items: [SavingsItem] = []
     var completions: [CompletionRecord] = []
@@ -552,5 +559,79 @@ extension ChecklistData {
 
     var automaticTransferItemCount: Int {
         items.filter(\.requiresAutomaticTransferConfirmation).count
+    }
+
+    func attentionWindows(
+        around date: Date,
+        calendar: Calendar = .current
+    ) -> [ChecklistAttentionWindow] {
+        let currentCycleStart = CycleDate.start(
+            for: date,
+            payday: payday,
+            holidays: holidayDateSet,
+            calendar: calendar
+        )
+        let nextCycleStart = CycleDate.nextBoundary(
+            after: date,
+            payday: payday,
+            holidays: holidayDateSet,
+            calendar: calendar
+        )
+        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
+            ?? currentCycleStart
+        let previousCycleStart = CycleDate.start(
+            for: previousReference,
+            payday: payday,
+            holidays: holidayDateSet,
+            calendar: calendar
+        )
+        var windows: [ChecklistAttentionWindow] = []
+
+        for cycleStart in [previousCycleStart, currentCycleStart, nextCycleStart] {
+            let cycleKey = cycleKey(for: cycleStart, calendar: calendar)
+            for item in items {
+                if !isStepComplete(item.id, cycleKey: cycleKey, step: .deposit) {
+                    let depositDate = CycleDate.dueDate(
+                        for: item,
+                        cycleStarting: cycleStart,
+                        calendar: calendar
+                    )
+                    windows.append(ChecklistAttentionWindow(
+                        itemID: item.id,
+                        cycleKey: cycleKey,
+                        step: .deposit,
+                        start: calendar.startOfDay(for: depositDate)
+                    ))
+                }
+
+                guard item.requiresAutomaticTransferConfirmation,
+                      !isStepComplete(
+                        item.id,
+                        cycleKey: cycleKey,
+                        step: .automaticTransfer
+                      ) else { continue }
+                let transferDate = CycleDate.automaticTransferDate(
+                    for: item,
+                    cycleStarting: cycleStart,
+                    holidays: holidayDateSet,
+                    calendar: calendar
+                )
+                windows.append(ChecklistAttentionWindow(
+                    itemID: item.id,
+                    cycleKey: cycleKey,
+                    step: .automaticTransfer,
+                    start: calendar.startOfDay(for: transferDate)
+                ))
+            }
+        }
+        return windows
+    }
+
+    func activeAttentionWindows(
+        at date: Date,
+        calendar: Calendar = .current
+    ) -> [ChecklistAttentionWindow] {
+        attentionWindows(around: date, calendar: calendar)
+            .filter { $0.start <= date }
     }
 }

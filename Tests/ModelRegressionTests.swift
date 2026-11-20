@@ -18,6 +18,8 @@ enum ModelRegressionTests {
         try testV4RepositoryMigration()
         try testHolidayCalendarMatching()
         try testHolidayEventDateExpansion()
+        try testQuietPeriodBeforeNextDepositTarget()
+        try testDepositAndTransferAttentionDates()
         print("Model regression tests passed")
     }
 
@@ -184,6 +186,86 @@ enum ModelRegressionTests {
         try expect(
             multiDayKeys == ["2026-10-03", "2026-10-04"],
             "종일 일정의 종료일은 exclusive로 처리해야 합니다."
+        )
+    }
+
+    private static func testQuietPeriodBeforeNextDepositTarget() throws {
+        let item = SavingsItem(name: "월급일 입금", amount: 100_000, debitDay: 25)
+        let previousCycleKey = CycleDate.key(
+            for: date(2026, 10, 1),
+            payday: 25,
+            calendar: calendar
+        )
+        let data = ChecklistData(
+            items: [item],
+            completions: [CompletionRecord(
+                itemID: item.id,
+                cycleKey: previousCycleKey,
+                step: .deposit,
+                completedAt: date(2026, 10, 1)
+            )],
+            payday: 25
+        )
+
+        try expect(
+            data.activeAttentionWindows(at: date(2026, 10, 24, hour: 23), calendar: calendar).isEmpty,
+            "이전 주기를 완료했다면 다음 입금 목표일 전에는 알림 대상이 없어야 합니다."
+        )
+        let targetDayWindows = data.activeAttentionWindows(
+            at: date(2026, 10, 25),
+            calendar: calendar
+        )
+        try expect(
+            targetDayWindows.count == 1 && targetDayWindows[0].step == .deposit,
+            "다음 입금 목표일이 되면 새 주기의 입금 알림 대상이 생겨야 합니다."
+        )
+    }
+
+    private static func testDepositAndTransferAttentionDates() throws {
+        let item = SavingsItem(
+            name: "목표일 분리",
+            amount: 100_000,
+            debitDay: 26,
+            requiresAutomaticTransferConfirmation: true,
+            automaticTransferDay: 30
+        )
+        let previousCycleKey = CycleDate.key(
+            for: date(2026, 10, 5),
+            payday: 25,
+            calendar: calendar
+        )
+        let data = ChecklistData(
+            items: [item],
+            completions: CompletionStep.allCases.map { step in
+                CompletionRecord(
+                    itemID: item.id,
+                    cycleKey: previousCycleKey,
+                    step: step,
+                    completedAt: date(2026, 10, 5)
+                )
+            },
+            payday: 25
+        )
+
+        try expect(
+            data.activeAttentionWindows(at: date(2026, 10, 25, hour: 23), calendar: calendar).isEmpty,
+            "월급일이 지나도 입금 목표일 전에는 알림 대상이 없어야 합니다."
+        )
+        let depositDayWindows = data.activeAttentionWindows(
+            at: date(2026, 10, 26),
+            calendar: calendar
+        )
+        try expect(
+            depositDayWindows.map(\.step) == [.deposit],
+            "입금 목표일에는 입금 단계만 알림 대상이어야 합니다."
+        )
+        let transferDaySteps = Set(data.activeAttentionWindows(
+            at: date(2026, 10, 30),
+            calendar: calendar
+        ).map(\.step))
+        try expect(
+            transferDaySteps == Set(CompletionStep.allCases),
+            "자동이체일에는 미완료 입금과 자동이체 단계가 모두 알림 대상이어야 합니다."
         )
     }
 }

@@ -2,6 +2,12 @@ import Foundation
 import UserNotifications
 
 enum NotificationScheduler {
+    private struct AttentionKey: Hashable {
+        let itemID: UUID
+        let cycleKey: String
+        let step: CompletionStep
+    }
+
     static let depositCompleteAction = "DONCHECK_DEPOSIT_COMPLETE"
     static let automaticTransferCompleteAction = "DONCHECK_TRANSFER_COMPLETE"
     static let depositCategory = "DONCHECK_DEPOSIT_ITEM"
@@ -199,8 +205,27 @@ enum NotificationScheduler {
             try? await center.add(request)
         }
 
-        let key = data.cycleKey(for: now)
-        let remaining = data.items.filter { !data.isComplete($0.id, cycleKey: key) }.count
+        let activeWindows = data.activeAttentionWindows(at: now, calendar: calendar)
+        let activeKeys = Set(activeWindows.map {
+            AttentionKey(itemID: $0.itemID, cycleKey: $0.cycleKey, step: $0.step)
+        })
+        let delivered = await center.deliveredNotifications()
+        let staleDeliveredIDs = delivered.compactMap { notification -> String? in
+            let request = notification.request
+            guard request.identifier.hasPrefix(AppConfig.notificationPrefix) else { return nil }
+            guard let itemIDString = request.content.userInfo["itemID"] as? String,
+                  let itemID = UUID(uuidString: itemIDString),
+                  let cycleKey = request.content.userInfo["cycleKey"] as? String else {
+                return request.identifier
+            }
+            let step = (request.content.userInfo["step"] as? String)
+                .flatMap(CompletionStep.init(rawValue:)) ?? .deposit
+            let key = AttentionKey(itemID: itemID, cycleKey: cycleKey, step: step)
+            return activeKeys.contains(key) ? nil : request.identifier
+        }
+        center.removeDeliveredNotifications(withIdentifiers: staleDeliveredIDs)
+
+        let remaining = Set(activeWindows.map(\.itemID)).count
         try? await center.setBadgeCount(remaining)
     }
 

@@ -280,85 +280,23 @@ enum LiveActivityManager {
         let start: Date
     }
 
-    private struct AttentionWindow {
-        let itemID: UUID
-        let cycleKey: String
-        let step: CompletionStep
-        let start: Date
-    }
-
     private struct WindowItemKey: Hashable {
         let itemID: UUID
         let cycleKey: String
     }
 
-    private static func activeAttentionWindows(data: ChecklistData, at date: Date) -> [AttentionWindow] {
-        attentionWindows(data: data, now: date)
-            .filter { $0.start <= date }
+    private static func activeAttentionWindows(
+        data: ChecklistData,
+        at date: Date
+    ) -> [ChecklistAttentionWindow] {
+        data.activeAttentionWindows(at: date)
     }
 
-    private static func attentionWindows(data: ChecklistData, now: Date) -> [AttentionWindow] {
-        let calendar = Calendar.current
-        let currentCycleStart = CycleDate.start(
-            for: now,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
-        let nextCycleStart = CycleDate.nextBoundary(
-            after: now,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
-        let previousReference = calendar.date(byAdding: .day, value: -1, to: currentCycleStart)
-            ?? currentCycleStart
-        let previousCycleStart = CycleDate.start(
-            for: previousReference,
-            payday: data.payday,
-            holidays: data.holidayDateSet,
-            calendar: calendar
-        )
-        var windows: [AttentionWindow] = []
-
-        for cycleStart in [previousCycleStart, currentCycleStart, nextCycleStart] {
-            let cycleKey = data.cycleKey(for: cycleStart, calendar: calendar)
-            for item in data.items {
-                if !data.isStepComplete(item.id, cycleKey: cycleKey, step: .deposit) {
-                    let depositDate = CycleDate.dueDate(
-                        for: item,
-                        cycleStarting: cycleStart,
-                        calendar: calendar
-                    )
-                    windows.append(AttentionWindow(
-                        itemID: item.id,
-                        cycleKey: cycleKey,
-                        step: .deposit,
-                        start: calendar.startOfDay(for: depositDate)
-                    ))
-                }
-
-                guard item.requiresAutomaticTransferConfirmation,
-                      !data.isStepComplete(
-                        item.id,
-                        cycleKey: cycleKey,
-                        step: .automaticTransfer
-                      ) else { continue }
-                let transferDate = CycleDate.automaticTransferDate(
-                    for: item,
-                    cycleStarting: cycleStart,
-                    holidays: data.holidayDateSet,
-                    calendar: calendar
-                )
-                windows.append(AttentionWindow(
-                    itemID: item.id,
-                    cycleKey: cycleKey,
-                    step: .automaticTransfer,
-                    start: calendar.startOfDay(for: transferDate)
-                ))
-            }
-        }
-        return windows
+    private static func attentionWindows(
+        data: ChecklistData,
+        now: Date
+    ) -> [ChecklistAttentionWindow] {
+        data.attentionWindows(around: now)
     }
 
     private static func relayEvents(data: ChecklistData, now: Date) -> [ScheduledEvent] {
@@ -436,7 +374,7 @@ enum LiveActivityManager {
 
     private static func contentState(
         data: ChecklistData,
-        windows: [AttentionWindow],
+        windows: [ChecklistAttentionWindow],
         subtitle: String
     ) -> SavingsChecklistAttributes.ContentState {
         let grouped = Dictionary(grouping: windows) {
@@ -483,7 +421,7 @@ enum LiveActivityManager {
         )
     }
 
-    private static func subtitle(for windows: [AttentionWindow]) -> String {
+    private static func subtitle(for windows: [ChecklistAttentionWindow]) -> String {
         let steps = Set(windows.map(\.step))
         if steps == Set(CompletionStep.allCases) {
             return "입금·자동이체 확인 · 체크할 때까지 표시해요"
